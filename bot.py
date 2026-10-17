@@ -8,6 +8,7 @@ from database.session import init_db, async_session
 from services.funpay_service import FunPayService
 from handlers import start, buyer, admin
 from handlers.rental_checker import rental_checker_loop
+from handlers.reservation_checker import reservation_checker_loop
 
 logging.basicConfig(level=logging.INFO)
 
@@ -38,6 +39,9 @@ async def main():
     dp.include_router(admin.router)
 
     await init_db()
+
+    # Фоновые задачи
+    asyncio.create_task(reservation_checker_loop())
     asyncio.create_task(rental_checker_loop())
 
     logging.info("✅ Бот запущен")
