@@ -2,8 +2,10 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy import String, Integer, Float, DateTime, ForeignKey, Text, BigInteger
 from datetime import datetime
 
+
 class Base(DeclarativeBase):
     pass
+
 
 class Account(Base):
     __tablename__ = "accounts"
@@ -13,19 +15,13 @@ class Account(Base):
     password: Mapped[str] = mapped_column(String(255), nullable=False)
     rank: Mapped[str] = mapped_column(String(100), nullable=False)
 
-    # 'sale' — продажа, 'rental' — аренда
     type: Mapped[str] = mapped_column(String(20), default="sale")
-
-    # 'free' | 'reserved' | 'sold' | 'rented'
     status: Mapped[str] = mapped_column(String(20), default="free")
 
     description: Mapped[str] = mapped_column(Text, nullable=True)
     photo_id: Mapped[str] = mapped_column(String(255), nullable=True)
 
-    # Цена продажи
     price: Mapped[float] = mapped_column(Float, nullable=True)
-
-    # Цены аренды
     price_3h: Mapped[float] = mapped_column(Float, nullable=True)
     price_6h: Mapped[float] = mapped_column(Float, nullable=True)
     price_12h: Mapped[float] = mapped_column(Float, nullable=True)
@@ -33,9 +29,16 @@ class Account(Base):
     lot_id: Mapped[str] = mapped_column(String(100), nullable=True)
     order_id: Mapped[str] = mapped_column(String(100), nullable=True)
     buyer_id: Mapped[int] = mapped_column(BigInteger, nullable=True)
+
+    # Дедлайн резерва (когда снять бронь, если не оплатили)
+    reserved_until: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+
+    # Для аренды — до какого момента аккаунт занят
     rented_until: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     sold_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+
 
 class Order(Base):
     __tablename__ = "orders"
