@@ -8,3 +8,6 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///valoshop.db")
 
 # Сколько минут аккаунт остаётся в резерве, если не оплатили
 RESERVE_MINUTES = int(os.getenv("RESERVE_MINUTES", "30"))
+
+# Токен CryptoBot (получить в @CryptoBot → /pay → Create App)
+CRYPTOBOT_TOKEN = os.getenv("CRYPTOBOT_TOKEN")
