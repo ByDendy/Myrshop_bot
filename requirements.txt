@@ -3,5 +3,4 @@ sqlalchemy[asyncio]==2.0.54
 aiosqlite==0.20.0
 aioFunPayAPI==1.1.3
 asyncpg==0.29.0
-aiocryptopay==0.4.8
-certifi==2023.11.17
+aiohttp==3.9.5
