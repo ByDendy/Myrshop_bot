@@ -66,3 +66,13 @@ def account_details_keyboard(acc, acc_type: str):
         callback_data=f"rank|{acc_type}|{acc.rank}"
     )])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def payment_method_keyboard(acc_id: int, action: str, hours: int = 0):
+    """Клавиатура выбора способа оплаты: FunPay или Крипта."""
+    buttons = [
+        [InlineKeyboardButton(text="💳 Оплатить через FunPay", callback_data=f"pay_funpay|{action}|{acc_id}|{hours}")],
+        [InlineKeyboardButton(text="🪙 Оплатить криптовалютой", callback_data=f"pay_crypto|{action}|{acc_id}|{hours}")],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data=f"view|{acc_id}")],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
