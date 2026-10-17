@@ -30,7 +30,6 @@ class Account(Base):
     order_id: Mapped[str] = mapped_column(String(100), nullable=True)
     buyer_id: Mapped[int] = mapped_column(BigInteger, nullable=True)
 
-    # 'funpay' | 'crypto'
     payment_method: Mapped[str] = mapped_column(String(20), nullable=True)
 
     reserved_until: Mapped[datetime] = mapped_column(DateTime, nullable=True)
@@ -51,3 +50,10 @@ class Order(Base):
     amount: Mapped[float] = mapped_column(Float, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class Setting(Base):
+    __tablename__ = "settings"
+
+    key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    value: Mapped[str] = mapped_column(Text, nullable=True)
