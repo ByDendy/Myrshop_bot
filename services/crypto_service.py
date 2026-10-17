@@ -1,6 +1,7 @@
 from aiocryptopay import AioCryptoPay, Networks
-from config import CRYPTOBOT_TOKEN
+from config import CRYPTOBOT_TOKEN, RESERVE_MINUTES
 import logging
+
 
 class CryptoService:
     def __init__(self):
@@ -11,7 +12,7 @@ class CryptoService:
             self.crypto = AioCryptoPay(token=CRYPTOBOT_TOKEN, network=Networks.MAIN_NET)
 
     async def create_invoice(self, amount: float, description: str) -> dict | None:
-        """Создаёт счёт в USDT (можно изменить на TON, BTC и т.д.)."""
+        """Создаёт счёт в USDT."""
         if not self.crypto:
             return None
         try:
@@ -19,7 +20,7 @@ class CryptoService:
                 asset="USDT",
                 amount=amount,
                 description=description,
-                expires_in=RESERVE_MINUTES * 60  # счёт живёт столько же, сколько резерв
+                expires_in=RESERVE_MINUTES * 60,
             )
             return {
                 "invoice_id": invoice.invoice_id,
