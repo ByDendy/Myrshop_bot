@@ -38,6 +38,7 @@ def admin_menu():
         [InlineKeyboardButton(text="📦 Массовая загрузка (аренда)", callback_data="admin_bulk")],
         [InlineKeyboardButton(text="📋 Список аккаунтов", callback_data="admin_list")],
         [InlineKeyboardButton(text="📝 Описание аренды", callback_data="admin_edit_rental_desc")],
+        [InlineKeyboardButton(text="🔄 Синхронизировать лоты", callback_data="admin_sync_lots")],
         [InlineKeyboardButton(text="🗑 Удалить аккаунт", callback_data="admin_delete")],
         [InlineKeyboardButton(text="🔄 Снять все резервы", callback_data="admin_clear_reserves")],
     ])
@@ -119,8 +120,12 @@ async def add_description(message: Message, state: FSMContext):
 async def add_photo(message: Message, state: FSMContext):
     if message.photo:
         photo_id = message.photo[-1].file_id
-    else:
+    elif message.text and message.text.strip().lower() in ("нет", "no", "skip", "-"):
         photo_id = None
+    else:
+        await message.answer("Отправьте фото или напишите «нет».")
+        return
+
     await state.update_data(photo_id=photo_id)
     await state.set_state(AddAccount.price)
 
@@ -166,7 +171,7 @@ async def add_price(message: Message, state: FSMContext, session):
             login=data["login"],
             password=data["password"],
             rank=data["rank"],
-            description=None,  # подставляется из настроек при показе
+            description=None,
             photo_id=data["photo_id"],
             type="rental",
             price_3h=prices[0],
@@ -177,6 +182,11 @@ async def add_price(message: Message, state: FSMContext, session):
 
     session.add(account)
     await session.commit()
+
+    # Триггерим синхронизацию лота для этого ранга
+    from services.lot_manager import sync_for_account
+    await sync_for_account(session, account)
+
     await state.clear()
     await message.answer(
         f"✅ Аккаунт #{account.id} добавлен!",
@@ -237,9 +247,23 @@ async def do_delete(callback: CallbackQuery, session):
     if not account:
         await callback.answer("Аккаунт не найден", show_alert=True)
         return
+
+    # Запоминаем данные для пересчёта лота после удаления
+    acc_type = account.type
+    acc_rank = account.rank
+
     await session.delete(account)
     await session.commit()
     await callback.answer(f"✅ Аккаунт #{acc_id} удалён", show_alert=True)
+
+    # Синхронизируем лот — возможно, пул опустел и лот нужно снять
+    from services.lot_manager import sync_for_account
+    class _Stub:
+        pass
+    stub = _Stub()
+    stub.type = acc_type
+    stub.rank = acc_rank
+    await sync_for_account(session, stub)
 
     result = await session.execute(select(Account).order_by(Account.id))
     accounts = result.scalars().all()
@@ -420,12 +444,13 @@ async def bulk_confirm(callback: CallbackQuery, state: FSMContext, session):
         await callback.answer("Нет данных для сохранения", show_alert=True)
         return
 
+    affected_ranks = set()
     for login, password, rank, prices in parsed:
         session.add(Account(
             login=login,
             password=password,
             rank=rank,
-            description=None,  # подставляется из настроек при показе
+            description=None,
             photo_id=photo_id,
             type="rental",
             price_3h=prices[0],
@@ -433,12 +458,20 @@ async def bulk_confirm(callback: CallbackQuery, state: FSMContext, session):
             price_12h=prices[2],
             status="free",
         ))
+        affected_ranks.add(rank)
     await session.commit()
-    await state.clear()
 
+    # Синхронизируем лоты по всем задействованным рангам
+    from services.lot_manager import sync_one
+    for rank in affected_ranks:
+        for h in (3, 6, 12):
+            await sync_one(session, "rental", rank, h)
+
+    await state.clear()
     await callback.message.delete()
     await callback.message.answer(
-        f"✅ Успешно добавлено: {len(parsed)} аккаунтов аренды.",
+        f"✅ Успешно добавлено: {len(parsed)} аккаунтов аренды.\n"
+        f"Лоты синхронизированы для {len(affected_ranks)} ранг(ов).",
         reply_markup=admin_menu()
     )
 
@@ -448,6 +481,7 @@ async def bulk_confirm(callback: CallbackQuery, state: FSMContext, session):
 @router.callback_query(F.data == "admin_clear_reserves")
 async def clear_reserves(callback: CallbackQuery, session):
     from services.funpay_service import FunPayService
+    from services.lot_manager import sync_for_account
     funpay = FunPayService()
     result = await session.execute(select(Account).where(Account.status == "reserved"))
     reserved = result.scalars().all()
@@ -458,7 +492,7 @@ async def clear_reserves(callback: CallbackQuery, session):
     for acc in reserved:
         if acc.lot_id:
             try:
-                await funpay.close_lot(acc.lot_id)
+                await funpay.deactivate_lot(acc.lot_id)
                 closed += 1
             except Exception:
                 pass
@@ -471,3 +505,24 @@ async def clear_reserves(callback: CallbackQuery, session):
         f"✅ Снято резервов: {len(reserved)}\nЗакрыто лотов: {closed}",
         show_alert=True
     )
+    await callback.message.answer("🔧 Админ-панель:", reply_markup=admin_menu())
+
+
+# ---------- Синхронизация лотов ----------
+
+@router.callback_query(F.data == "admin_sync_lots")
+async def sync_lots_button(callback: CallbackQuery, session):
+    from services.lot_manager import sync_all
+    await callback.answer("⏳ Синхронизация запущена...", show_alert=False)
+    try:
+        await sync_all(session)
+        await callback.message.answer(
+            "✅ Синхронизация завершена.\n"
+            "Проверь лог Railway на ошибки FunPay (если категория или API не настроены).",
+            reply_markup=admin_menu()
+        )
+    except Exception as e:
+        await callback.message.answer(
+            f"❌ Ошибка синхронизации: {e}",
+            reply_markup=admin_menu()
+        )
