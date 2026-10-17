@@ -1,0 +1,35 @@
+import asyncio
+import logging
+from aiogram import Bot, Dispatcher
+from aiogram.fsm.storage.memory import MemoryStorage
+from config import BOT_TOKEN
+from database.session import init_db, async_session
+from services.funpay_service import FunPayService
+from handlers import start, buyer, admin
+
+logging.basicConfig(level=logging.INFO)
+
+async def main():
+    bot = Bot(token=BOT_TOKEN)
+    dp = Dispatcher(storage=MemoryStorage())
+
+    funpay = FunPayService()
+
+    async def session_middleware(handler, event, data):
+        async with async_session() as session:
+            data["session"] = session
+            data["funpay"] = funpay
+            return await handler(event, data)
+
+    dp.message.middleware(session_middleware)
+    dp.callback_query.middleware(session_middleware)
+
+    dp.include_router(start.router)
+    dp.include_router(buyer.router)
+    dp.include_router(admin.router)
+
+    await init_db()
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
