@@ -30,11 +30,12 @@ class Account(Base):
     order_id: Mapped[str] = mapped_column(String(100), nullable=True)
     buyer_id: Mapped[int] = mapped_column(BigInteger, nullable=True)
 
-    # Дедлайн резерва (когда снять бронь, если не оплатили)
-    reserved_until: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    # 'funpay' | 'crypto'
+    payment_method: Mapped[str] = mapped_column(String(20), nullable=True)
 
-    # Для аренды — до какого момента аккаунт занят
+    reserved_until: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     rented_until: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    crypto_invoice_id: Mapped[int] = mapped_column(BigInteger, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     sold_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
