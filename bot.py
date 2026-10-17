@@ -1,15 +1,24 @@
 import asyncio
 import logging
+import sys
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from config import BOT_TOKEN
 from database.session import init_db, async_session
 from services.funpay_service import FunPayService
 from handlers import start, buyer, admin
+from handlers.rental_checker import rental_checker_loop
 
 logging.basicConfig(level=logging.INFO)
 
+
 async def main():
+    if not BOT_TOKEN:
+        logging.error(
+            "❌ BOT_TOKEN не задан! Добавь переменную BOT_TOKEN в Railway → Variables."
+        )
+        sys.exit(1)
+
     bot = Bot(token=BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
 
@@ -29,7 +38,11 @@ async def main():
     dp.include_router(admin.router)
 
     await init_db()
+    asyncio.create_task(rental_checker_loop())
+
+    logging.info("✅ Бот запущен")
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
