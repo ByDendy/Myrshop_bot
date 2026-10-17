@@ -11,14 +11,16 @@ class CryptoService:
         else:
             self.crypto = AioCryptoPay(token=CRYPTOBOT_TOKEN, network=Networks.MAIN_NET)
 
-    async def create_invoice(self, amount: float, description: str) -> dict | None:
-        """Создаёт счёт в USDT."""
+    async def create_invoice(self, amount_rub: float, description: str) -> dict | None:
+        """Создаёт счёт в рублях. CryptoBot сам конвертирует в крипту по курсу."""
         if not self.crypto:
             return None
         try:
             invoice = await self.crypto.create_invoice(
-                asset="USDT",
-                amount=amount,
+                amount=amount_rub,
+                currency_type="fiat",
+                fiat="RUB",
+                accepted_assets="USDT",  # можно убрать, если хочешь принимать любую крипту
                 description=description,
                 expires_in=RESERVE_MINUTES * 60,
             )
