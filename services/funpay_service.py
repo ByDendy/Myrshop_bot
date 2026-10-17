@@ -19,7 +19,9 @@ class FunPayService:
         if hours:
             title = f"Valorant аккаунт {account.rank} — аренда {hours}ч"
             final_price = price or {
-                3: account.price_3h, 6: account.price_6h, 12: account.price_12h,
+                3: account.price_3h,
+                6: account.price_6h,
+                12: account.price_12h,
             }[hours]
         else:
             title = f"Valorant аккаунт {account.rank}"
@@ -33,3 +35,15 @@ class FunPayService:
             amount=1,
         )
         return lot.url
+
+    async def close_lot(self, lot_id: str):
+        """Удаляет / деактивирует лот на FunPay. Вызывается при истечении резерва."""
+        if not self.account:
+            await self.init()
+        # Название метода зависит от версии aioFunPayAPI.
+        # В большинстве версий это delete_lot:
+        try:
+            await self.account.delete_lot(int(lot_id))
+        except AttributeError:
+            # если в твоей версии метод иначе — замени на нужный
+            raise
