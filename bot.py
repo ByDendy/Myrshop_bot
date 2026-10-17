@@ -8,6 +8,8 @@ from database.session import init_db, async_session
 from services.funpay_service import FunPayService
 from services.crypto_service import CryptoService
 from services.settings_service import seed_defaults
+from services.lot_manager import lot_manager_loop
+from services.order_watcher import order_watcher_loop
 from handlers import start, buyer, admin
 from handlers.rental_checker import rental_checker_loop
 from handlers.reservation_checker import reservation_checker_loop
@@ -18,7 +20,7 @@ logging.basicConfig(level=logging.INFO)
 
 async def main():
     if not BOT_TOKEN:
-        logging.error("❌ BOT_TOKEN не задан! Добавь переменную BOT_TOKEN в Railway → Variables.")
+        logging.error("❌ BOT_TOKEN не задан")
         sys.exit(1)
 
     bot = Bot(token=BOT_TOKEN)
@@ -45,11 +47,14 @@ async def main():
     async with async_session() as session:
         await seed_defaults(session)
 
+    # Фоновые задачи
     asyncio.create_task(reservation_checker_loop())
     asyncio.create_task(rental_checker_loop())
     asyncio.create_task(crypto_payment_checker_loop(bot))
+    asyncio.create_task(lot_manager_loop())
+    asyncio.create_task(order_watcher_loop(bot, funpay))
 
-    logging.info("✅ Бот запущен (FunPay + Крипта)")
+    logging.info("✅ Бот запущен (лоты per-rank + FunPay + Крипта)")
     await dp.start_polling(bot)
 
 
