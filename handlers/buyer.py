@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
 from sqlalchemy import select, distinct
@@ -6,6 +7,7 @@ from keyboards.inline import (
     shop_menu, ranks_keyboard, accounts_keyboard, account_details_keyboard
 )
 from services.funpay_service import FunPayService
+from config import RESERVE_MINUTES
 
 router = Router()
 
@@ -122,6 +124,7 @@ async def buy_account(callback: CallbackQuery, session, funpay: FunPayService):
 
     account.status = "reserved"
     account.buyer_id = callback.from_user.id
+    account.reserved_until = datetime.utcnow() + timedelta(minutes=RESERVE_MINUTES)
     await session.commit()
 
     lot_url = await funpay.create_lot(account)
@@ -130,9 +133,11 @@ async def buy_account(callback: CallbackQuery, session, funpay: FunPayService):
 
     await callback.message.delete()
     await callback.message.answer(
-        f"✅ Аккаунт #{account.id} зарезервирован!\n\n"
+        f"✅ Аккаунт #{account.id} зарезервирован на {RESERVE_MINUTES} мин.\n\n"
         f"💰 Сумма к оплате: {account.price:.0f} ₽\n"
         f"🔗 Ссылка на оплату: {lot_url}\n\n"
+        f"⏳ Если не оплатите в течение {RESERVE_MINUTES} минут — "
+        f"бронь снимется, и аккаунт вернётся в магазин.\n\n"
         f"После оплаты бот автоматически выдаст данные."
     )
 
@@ -153,6 +158,7 @@ async def rent_account(callback: CallbackQuery, session, funpay: FunPayService):
 
     account.status = "reserved"
     account.buyer_id = callback.from_user.id
+    account.reserved_until = datetime.utcnow() + timedelta(minutes=RESERVE_MINUTES)
     await session.commit()
 
     lot_url = await funpay.create_lot(account, hours=hours, price=price)
@@ -164,5 +170,7 @@ async def rent_account(callback: CallbackQuery, session, funpay: FunPayService):
         f"✅ Аккаунт #{account.id} зарезервирован на {hours} ч.\n\n"
         f"💰 Сумма к оплате: {price:.0f} ₽\n"
         f"🔗 Ссылка на оплату: {lot_url}\n\n"
+        f"⏳ Если не оплатите в течение {RESERVE_MINUTES} минут — "
+        f"бронь снимется, и аккаунт вернётся в магазин.\n\n"
         f"После оплаты бот автоматически выдаст данные."
     )
