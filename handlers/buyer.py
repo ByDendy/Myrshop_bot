@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
 from sqlalchemy import select, distinct
-from database.models import Account
+from database.models import Account, RankLot
 from keyboards.inline import (
     shop_menu, ranks_keyboard, accounts_keyboard,
     account_details_keyboard, payment_method_keyboard
@@ -123,8 +123,9 @@ async def choose_payment_for_rental(callback: CallbackQuery):
     )
 
 
+# ---------- Оплата через FunPay ----------
 @router.callback_query(F.data.startswith("pay_funpay|"))
-async def pay_via_funpay(callback: CallbackQuery, session, funpay: FunPayService):
+async def pay_via_funpay(callback: CallbackQuery, session):
     _, action, acc_id_str, hours_str = callback.data.split("|")
     acc_id, hours = int(acc_id_str), int(hours_str)
     account = await session.get(Account, acc_id)
@@ -132,32 +133,41 @@ async def pay_via_funpay(callback: CallbackQuery, session, funpay: FunPayService
         await callback.answer("Этот аккаунт уже занят!", show_alert=True)
         return
 
+    hours_val = hours if action == "rent" else None
+
+    # Ищем активный лот для этого ранга/срока
+    q = select(RankLot).where(
+        RankLot.type == account.type,
+        RankLot.rank == account.rank,
+        RankLot.hours == hours_val,
+        RankLot.active == True,
+    )
+    rank_lot = (await session.execute(q)).scalar()
+
+    if not rank_lot or not rank_lot.lot_id:
+        await callback.answer(
+            "❌ Лот на FunPay временно недоступен. Попробуйте крипто-оплату.",
+            show_alert=True,
+        )
+        return
+
+    url = f"https://funpay.com/lots/offer?id={rank_lot.lot_id}"
     price = account.price if action == "sale" else {
         3: account.price_3h, 6: account.price_6h, 12: account.price_12h
     }[hours]
 
-    account.status = "reserved"
-    account.buyer_id = callback.from_user.id
-    account.payment_method = "funpay"
-    account.reserved_until = datetime.utcnow() + timedelta(minutes=RESERVE_MINUTES)
-    await session.commit()
-
-    lot_url = await funpay.create_lot(
-        account, hours=hours if action == "rent" else None, price=price
-    )
-    account.lot_id = lot_url.split("id=")[-1]
-    await session.commit()
-
     await callback.message.delete()
     await callback.message.answer(
-        f"✅ Аккаунт #{account.id} зарезервирован на {RESERVE_MINUTES} мин.\n\n"
-        f"💰 Сумма: {price:.0f} ₽\n"
-        f"🔗 Ссылка на оплату FunPay: {lot_url}\n\n"
-        f"⏳ Если не оплатите в течение {RESERVE_MINUTES} минут — бронь снимется.\n\n"
-        f"После оплаты бот автоматически выдаст данные."
+        f"💰 Оплата через FunPay\n\n"
+        f"Аккаунт: {account.rank}"
+        + (f" (аренда {hours}ч)" if action == "rent" else "")
+        + f"\nСумма: {price:.0f} ₽\n\n"
+        f"🔗 Ссылка на оплату: {url}\n\n"
+        f"После оплаты бот автоматически выдаст вам данные в чате FunPay."
     )
 
 
+# ---------- Оплата криптой ----------
 @router.callback_query(F.data.startswith("pay_crypto|"))
 async def pay_via_crypto(callback: CallbackQuery, session, crypto: CryptoService):
     _, action, acc_id_str, hours_str = callback.data.split("|")
