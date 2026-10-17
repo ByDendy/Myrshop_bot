@@ -27,6 +27,7 @@ def admin_menu():
         [InlineKeyboardButton(text="➕ Добавить аккаунт", callback_data="admin_add")],
         [InlineKeyboardButton(text="📋 Список аккаунтов", callback_data="admin_list")],
         [InlineKeyboardButton(text="🗑 Удалить аккаунт", callback_data="admin_delete")],
+        [InlineKeyboardButton(text="🔄 Снять все резервы", callback_data="admin_clear_reserves")],
     ])
 
 
@@ -254,4 +255,40 @@ async def do_delete(callback: CallbackQuery, session):
     await callback.message.answer(
         "Выберите аккаунт для удаления:",
         reply_markup=_delete_keyboard(accounts)
+    )
+
+
+@router.callback_query(F.data == "admin_clear_reserves")
+async def clear_reserves(callback: CallbackQuery, session):
+    """Снимает все резервы вручную и пытается закрыть лоты на FunPay."""
+    from services.funpay_service import FunPayService
+    from database.models import Account
+
+    funpay = FunPayService()
+    result = await session.execute(
+        select(Account).where(Account.status == "reserved")
+    )
+    reserved = result.scalars().all()
+
+    if not reserved:
+        await callback.answer("Нет активных резервов", show_alert=True)
+        return
+
+    closed = 0
+    for acc in reserved:
+        if acc.lot_id:
+            try:
+                await funpay.close_lot(acc.lot_id)
+                closed += 1
+            except Exception:
+                pass
+        acc.status = "free"
+        acc.buyer_id = None
+        acc.reserved_until = None
+        acc.lot_id = None
+
+    await session.commit()
+    await callback.answer(
+        f"✅ Снято резервов: {len(reserved)}\nЗакрыто лотов: {closed}",
+        show_alert=True
     )
