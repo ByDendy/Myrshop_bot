@@ -7,12 +7,14 @@ from config import BOT_TOKEN
 from database.session import init_db, async_session
 from services.funpay_service import FunPayService
 from services.crypto_service import CryptoService
+from services.settings_service import seed_defaults
 from handlers import start, buyer, admin
 from handlers.rental_checker import rental_checker_loop
 from handlers.reservation_checker import reservation_checker_loop
 from handlers.crypto_checker import crypto_payment_checker_loop
 
 logging.basicConfig(level=logging.INFO)
+
 
 async def main():
     if not BOT_TOKEN:
@@ -40,14 +42,16 @@ async def main():
     dp.include_router(admin.router)
 
     await init_db()
+    async with async_session() as session:
+        await seed_defaults(session)
 
-    # Фоновые задачи
     asyncio.create_task(reservation_checker_loop())
     asyncio.create_task(rental_checker_loop())
     asyncio.create_task(crypto_payment_checker_loop(bot))
 
     logging.info("✅ Бот запущен (FunPay + Крипта)")
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
