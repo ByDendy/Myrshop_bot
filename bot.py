@@ -19,7 +19,7 @@ logging.basicConfig(level=logging.INFO)
 
 async def main():
     if not BOT_TOKEN:
-        logging.error("❌ BOT_TOKEN не задан! Railway → Variables → BOT_TOKEN")
+        logging.error("❌ BOT_TOKEN не задан!")
         sys.exit(1)
 
     bot = Bot(token=BOT_TOKEN)
@@ -43,13 +43,13 @@ async def main():
 
     await init_db()
 
-    asyncio.create_task(rental_checker_loop())
+    asyncio.create_task(rental_checker_loop(bot))
     asyncio.create_task(payment_checker_loop(bot))
-    asyncio.create_task(reservation_checker_loop())
+    asyncio.create_task(reservation_checker_loop(cryptobot))
     asyncio.create_task(funpay_watcher_loop(bot, funpay))
     asyncio.create_task(lot_manager_loop(funpay))
 
-    logging.info("✅ MyrShop запущен: аренда + FunPay + CryptoBot + авто-лоты")
+    logging.info("✅ MyrShop запущен: аренда + FunPay + CryptoBot + статусы")
     await dp.start_polling(bot)
 
 
