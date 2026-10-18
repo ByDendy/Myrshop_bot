@@ -53,15 +53,28 @@ def rental_keyboard(acc):
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def payment_methods_keyboard(acc_id: int, hours: int):
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
-            text="🟡 FunPay", callback_data=f"pay|{acc_id}|{hours}|funpay",
-        )],
-        [InlineKeyboardButton(
-            text="🪙 CryptoBot", callback_data=f"pay|{acc_id}|{hours}|cryptobot",
-        )],
-        [InlineKeyboardButton(
-            text="◀️ Назад", callback_data=f"view|{acc_id}",
-        )],
-    ])
+def payment_methods_keyboard(methods: list, acc_id: int, hours: int):
+    buttons = []
+    for m in methods:
+        buttons.append([InlineKeyboardButton(
+            text=m.name,
+            callback_data=f"pay|{acc_id}|{hours}|{m.code}",
+        )])
+    buttons.append([InlineKeyboardButton(
+        text="◀️ Назад", callback_data=f"view|{acc_id}",
+    )])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def admin_payments_keyboard(methods: list):
+    buttons = []
+    for m in methods:
+        icon = "🟢" if m.enabled else "🔴"
+        buttons.append([InlineKeyboardButton(
+            text=f"{icon} {m.name}",
+            callback_data=f"toggle_pay|{m.id}",
+        )])
+    buttons.append([InlineKeyboardButton(
+        text="◀️ Назад", callback_data="admin_menu",
+    )])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
