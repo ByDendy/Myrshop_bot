@@ -26,12 +26,16 @@ class AddAccount(StatesGroup):
 
 
 class BulkUpload(StatesGroup):
-    photo = State()       # НОВЫЙ первый шаг
+    photo = State()
     wait_data = State()
 
 
 class EditTemplate(StatesGroup):
     wait_text = State()
+
+
+class ChangePassword(StatesGroup):
+    new_password = State()
 
 
 def admin_menu():
@@ -40,17 +44,18 @@ def admin_menu():
         [InlineKeyboardButton(text="📥 Массовая загрузка", callback_data="admin_bulk")],
         [InlineKeyboardButton(text="📋 Список аккаунтов", callback_data="admin_list")],
         [InlineKeyboardButton(text="🗑 Удалить аккаунт", callback_data="admin_delete")],
+        [InlineKeyboardButton(text="🔓 Снять все брони", callback_data="admin_unlock")],
+        [InlineKeyboardButton(text="🔑 Ожидают смены пароля", callback_data="admin_awaiting")],
         [InlineKeyboardButton(text="💳 Способы оплаты", callback_data="admin_payments")],
         [InlineKeyboardButton(text="📝 Шаблон описания", callback_data="admin_template")],
     ])
 
 
 async def _trigger_lot_manager(funpay: FunPayService):
-    """Запуск цикла лот-менеджера сразу после добавления аккаунтов."""
     try:
         await run_lot_manager_cycle(funpay)
     except Exception as e:
-        logging.error(f"Не удалось запустить lot_manager после добавления: {e}")
+        logging.error(f"lot_manager после действия админа: {e}")
 
 
 @router.message(Command("admin"), F.from_user.id.in_(ADMIN_IDS))
@@ -132,8 +137,6 @@ async def add_prices(message: Message, state: FSMContext, session, funpay: FunPa
     await state.clear()
 
     await message.answer(f"✅ Аккаунт #{account.id} добавлен!", reply_markup=admin_menu())
-
-    # НЕМЕДЛЕННО запускаем автосоздание лотов
     await _trigger_lot_manager(funpay)
 
 
@@ -155,7 +158,6 @@ async def bulk_photo(message: Message, state: FSMContext):
     photo_id = message.photo[-1].file_id if message.photo else None
     await state.update_data(photo_id=photo_id)
     await state.set_state(BulkUpload.wait_data)
-
     await message.answer(
         "Шаг 2 из 2: отправьте список аккаунтов.\n\n"
         "Формат каждой строки:\n"
@@ -213,10 +215,8 @@ async def bulk_process(message: Message, state: FSMContext, session, funpay: Fun
         result += "\n\n⚠️ Ошибки:\n" + "\n".join(errors[:10])
         if len(errors) > 10:
             result += f"\n... и ещё {len(errors) - 10}"
-
     await message.answer(result, reply_markup=admin_menu())
 
-    # НЕМЕДЛЕННО запускаем автосоздание лотов
     if created > 0:
         await message.answer("⏳ Создаю лоты на FunPay…")
         await _trigger_lot_manager(funpay)
@@ -235,11 +235,16 @@ async def list_accounts(callback: CallbackQuery, session):
         await callback.message.answer("📭 Аккаунтов пока нет.", reply_markup=admin_menu())
         return
 
-    emoji = {"free": "🟢", "reserved": "🟡", "rented": "🟠"}
+    emoji = {
+        "free": "🟢",
+        "reserved": "🟡",
+        "rented": "🟠",
+        "awaiting_password_change": "🔑",
+    }
     text = "📋 Все аккаунты:\n\n"
     for acc in accounts:
         e = emoji.get(acc.status, "❓")
-        text += f"{e} #{acc.id} | {acc.rank} | {acc.login}\n"
+        text += f"{e} #{acc.id} | {acc.rank} | {acc.login} | {acc.status}\n"
 
     await callback.message.answer(text, reply_markup=admin_menu())
 
@@ -290,8 +295,116 @@ async def do_delete(callback: CallbackQuery, session, funpay: FunPayService):
     await session.commit()
     await callback.answer(f"✅ Аккаунт #{acc_id} удалён", show_alert=True)
     await _show_delete_menu(callback, session)
+    await _trigger_lot_manager(funpay)
 
-    # После удаления тоже обновляем лоты (вдруг последний аккаунт ранга убрали)
+
+# ---------- СНЯТИЕ ВСЕХ БРОНЕЙ ----------
+
+@router.callback_query(F.data == "admin_unlock")
+async def unlock_all_reservations(callback: CallbackQuery, session, funpay: FunPayService):
+    result = await session.execute(
+        select(Account).where(Account.status == "reserved")
+    )
+    reserved = result.scalars().all()
+    count = len(reserved)
+
+    for acc in reserved:
+        acc.status = "free"
+        acc.buyer_id = None
+        acc.rental_hours = None
+        acc.payment_invoice_id = None
+        acc.reserved_at = None
+        acc.lot_id = None
+
+    await session.commit()
+
+    await callback.answer(
+        f"✅ Освобождено аккаунтов: {count}",
+        show_alert=True,
+    )
+    await callback.message.delete()
+    await callback.message.answer("🔧 Админ-панель:", reply_markup=admin_menu())
+
+    if count > 0:
+        await _trigger_lot_manager(funpay)
+
+
+# ---------- ОЖИДАЮТ СМЕНЫ ПАРОЛЯ ----------
+
+def _awaiting_keyboard(accounts):
+    buttons = []
+    for acc in accounts:
+        buttons.append([InlineKeyboardButton(
+            text=f"#{acc.id} — {acc.rank} ({acc.login})",
+            callback_data=f"chpw|{acc.id}",
+        )])
+    buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="admin_menu")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+@router.callback_query(F.data == "admin_awaiting")
+async def awaiting_menu(callback: CallbackQuery, session):
+    result = await session.execute(
+        select(Account)
+        .where(Account.status == "awaiting_password_change")
+        .order_by(Account.id)
+    )
+    accounts = result.scalars().all()
+
+    await callback.message.delete()
+    if not accounts:
+        await callback.message.answer(
+            "🔑 Нет аккаунтов, ожидающих смены пароля.",
+            reply_markup=admin_menu(),
+        )
+        return
+
+    await callback.message.answer(
+        "🔑 Аккаунты, ожидающие смены пароля.\n\n"
+        "Нажмите на аккаунт, чтобы ввести новый пароль "
+        "и вернуть его в свободные:",
+        reply_markup=_awaiting_keyboard(accounts),
+    )
+
+
+@router.callback_query(F.data.startswith("chpw|"))
+async def change_password_start(callback: CallbackQuery, state: FSMContext):
+    acc_id = int(callback.data.split("|")[1])
+    await state.update_data(acc_id=acc_id)
+    await state.set_state(ChangePassword.new_password)
+    await callback.message.delete()
+    await callback.message.answer(
+        f"Введите новый пароль для аккаунта #{acc_id}:"
+    )
+
+
+@router.message(ChangePassword.new_password)
+async def change_password_save(
+    message: Message, state: FSMContext, session, funpay: FunPayService
+):
+    data = await state.get_data()
+    acc_id = data["acc_id"]
+    account = await session.get(Account, acc_id)
+
+    if not account:
+        await message.answer("❌ Аккаунт не найден.")
+        await state.clear()
+        return
+
+    account.password = message.text.strip()
+    account.status = "free"
+    account.buyer_id = None
+    account.rental_hours = None
+    account.rented_until = None
+    account.reserved_at = None
+    account.payment_invoice_id = None
+    await session.commit()
+    await state.clear()
+
+    await message.answer(
+        f"✅ Пароль для #{acc_id} обновлён. Аккаунт снова свободен.",
+        reply_markup=admin_menu(),
+    )
     await _trigger_lot_manager(funpay)
 
 
