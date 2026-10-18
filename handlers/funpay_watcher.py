@@ -3,7 +3,18 @@ import logging
 from datetime import datetime, timedelta
 from sqlalchemy import select
 from aioFunPayAPI import Runner
-from aioFunPayAPI.enums import EventTypes, OrderStatuses
+
+# ------------------------------------------------------------------
+# Временная замена отсутствующему модулю aioFunPayAPI.enums.
+# Значения взяты из официальной документации библиотеки.
+# ------------------------------------------------------------------
+class EventTypes:
+    NEW_ORDER = 6
+
+class OrderStatuses:
+    PAID = 0
+# ------------------------------------------------------------------
+
 from database.models import Account
 from database.session import async_session
 from services.funpay_service import FunPayService
