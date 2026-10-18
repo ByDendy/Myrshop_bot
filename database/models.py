@@ -17,7 +17,12 @@ class Account(Base):
     password: Mapped[str] = mapped_column(String(255), nullable=False)
     rank: Mapped[str] = mapped_column(String(100), nullable=False)
 
-    status: Mapped[str] = mapped_column(String(20), default="free")
+    # Возможные статусы:
+    # free                    — свободен
+    # reserved                — бронь (до 15 мин на оплату)
+    # rented                  — занят до окончания аренды
+    # awaiting_password_change— аренда окончена, ждёт смены пароля
+    status: Mapped[str] = mapped_column(String(30), default="free")
 
     description: Mapped[str] = mapped_column(Text, nullable=True)
     photo_id: Mapped[str] = mapped_column(String(255), nullable=True)
@@ -25,6 +30,9 @@ class Account(Base):
     price_3h: Mapped[float] = mapped_column(Float, nullable=False)
     price_6h: Mapped[float] = mapped_column(Float, nullable=False)
     price_12h: Mapped[float] = mapped_column(Float, nullable=False)
+
+    lot_id: Mapped[str] = mapped_column(String(100), nullable=True)
+    payment_invoice_id: Mapped[str] = mapped_column(String(100), nullable=True)
 
     buyer_id: Mapped[int] = mapped_column(BigInteger, nullable=True)
     rental_hours: Mapped[int] = mapped_column(Integer, nullable=True)
