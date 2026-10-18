@@ -57,10 +57,13 @@ async def show_accounts(callback: CallbackQuery, session):
 
     text = f"📋 Аккаунты ранга {rank}:\n\n"
     for acc in accounts:
-        if acc.status == "free":
-            text += f"#{acc.id} — 🟢 Свободен\n"
-        else:
-            text += f"#{acc.id} — 🔴 Занят\n"
+        label = {
+            "free": "🟢 Свободен",
+            "reserved": "🟡 Бронь",
+            "rented": "🟠 Арендован",
+            "awaiting_password_change": "🔑 Готовится",
+        }.get(acc.status, "❓")
+        text += f"#{acc.id} — {label}\n"
 
     await callback.message.delete()
     await callback.message.answer(
@@ -80,7 +83,6 @@ async def view_account(callback: CallbackQuery, session):
         await callback.answer("Этот аккаунт уже занят", show_alert=True)
         return
 
-    # Глобальный шаблон описания с подстановкой ранга
     template = await get_setting(session, "description_template")
     if template:
         desc = template.replace("{rank}", account.rank)
@@ -122,8 +124,7 @@ async def rent_account(callback: CallbackQuery, session):
     methods = await _get_enabled_methods(session)
     if not methods:
         await callback.answer(
-            "😔 Способы оплаты временно недоступны. Свяжитесь с поддержкой.",
-            show_alert=True,
+            "😔 Способы оплаты временно недоступны.", show_alert=True,
         )
         return
 
@@ -152,7 +153,6 @@ async def handle_payment(
         await callback.answer("Этот аккаунт уже занят!", show_alert=True)
         return
 
-    # Проверяем, что способ включён
     method = (await session.execute(
         select(PaymentMethod).where(
             PaymentMethod.code == method_code,
@@ -166,21 +166,25 @@ async def handle_payment(
 
     price = {3: account.price_3h, 6: account.price_6h, 12: account.price_12h}[hours]
 
-    account.status = "reserved"
-    account.buyer_id = callback.from_user.id
-    account.rental_hours = hours
-    account.reserved_at = datetime.utcnow()
-    await session.commit()
-
     if method_code == "funpay":
+        # FunPay: НЕ резервируем — лот сам себя регулирует через lot_manager.
+        # Покупатель идёт на FunPay, оплачивает, watcher выдаёт данные.
         text = (
-            f"✅ Аккаунт #{account.id} зарезервирован на {hours} ч!\n\n"
-            f"💰 Сумма: {price:.0f} ₽\n"
+            f"🟡 Оплата через FunPay\n\n"
+            f"Аккаунт: {account.rank}, аренда на {hours} ч\n"
+            f"💰 Сумма: {price:.0f} ₽\n\n"
             f"🔗 Перейдите на FunPay и оплатите лот:\n"
             f"«{account.rank} — аренда {hours}ч»\n\n"
             f"После оплаты бот автоматически выдаст данные в чат FunPay."
         )
     elif method_code == "cryptobot":
+        # CryptoBot: резервируем на 15 минут
+        account.status = "reserved"
+        account.buyer_id = callback.from_user.id
+        account.rental_hours = hours
+        account.reserved_at = datetime.utcnow()
+        await session.commit()
+
         try:
             title = f"MyrShop #{account.id} ({account.rank}) — {hours}ч"
             data = await cryptobot.create_invoice(price, title)
@@ -196,7 +200,8 @@ async def handle_payment(
                 f"💰 Сумма: {price:.0f} ₽\n"
                 f"🪙 Оплата через CryptoBot\n\n"
                 f"🔗 Ссылка на оплату: {invoice['bot_invoice_url']}\n\n"
-                f"Счёт действует 1 час. После оплаты бот автоматически выдаст данные."
+                f"⏱ Счёт действует 15 минут.\n"
+                f"После оплаты бот автоматически выдаст данные."
             )
         except Exception as e:
             account.status = "free"
