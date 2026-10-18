@@ -1,3 +1,4 @@
+import logging
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import (
@@ -9,6 +10,8 @@ from sqlalchemy import select
 from database.models import Account, PaymentMethod
 from keyboards.inline import admin_payments_keyboard
 from services.settings_service import get_setting, set_setting
+from services.funpay_service import FunPayService
+from handlers.lot_manager import run_lot_manager_cycle
 from config import ADMIN_IDS
 
 router = Router()
@@ -23,6 +26,7 @@ class AddAccount(StatesGroup):
 
 
 class BulkUpload(StatesGroup):
+    photo = State()       # НОВЫЙ первый шаг
     wait_data = State()
 
 
@@ -41,6 +45,14 @@ def admin_menu():
     ])
 
 
+async def _trigger_lot_manager(funpay: FunPayService):
+    """Запуск цикла лот-менеджера сразу после добавления аккаунтов."""
+    try:
+        await run_lot_manager_cycle(funpay)
+    except Exception as e:
+        logging.error(f"Не удалось запустить lot_manager после добавления: {e}")
+
+
 @router.message(Command("admin"), F.from_user.id.in_(ADMIN_IDS))
 async def admin_panel(message: Message):
     await message.answer("🔧 Админ-панель:", reply_markup=admin_menu())
@@ -53,7 +65,7 @@ async def back_admin(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer("🔧 Админ-панель:", reply_markup=admin_menu())
 
 
-# ---------- ДОБАВЛЕНИЕ ----------
+# ---------- ДОБАВЛЕНИЕ (одиночное) ----------
 
 @router.callback_query(F.data == "admin_add")
 async def add_start(callback: CallbackQuery, state: FSMContext):
@@ -95,7 +107,7 @@ async def add_photo(message: Message, state: FSMContext):
 
 
 @router.message(AddAccount.prices)
-async def add_prices(message: Message, state: FSMContext, session):
+async def add_prices(message: Message, state: FSMContext, session, funpay: FunPayService):
     try:
         prices = [float(x.replace(",", ".")) for x in message.text.split()]
         if len(prices) != 3:
@@ -118,18 +130,35 @@ async def add_prices(message: Message, state: FSMContext, session):
     session.add(account)
     await session.commit()
     await state.clear()
+
     await message.answer(f"✅ Аккаунт #{account.id} добавлен!", reply_markup=admin_menu())
+
+    # НЕМЕДЛЕННО запускаем автосоздание лотов
+    await _trigger_lot_manager(funpay)
 
 
 # ---------- МАССОВАЯ ЗАГРУЗКА ----------
 
 @router.callback_query(F.data == "admin_bulk")
 async def bulk_start(callback: CallbackQuery, state: FSMContext):
-    await state.set_state(BulkUpload.wait_data)
+    await state.set_state(BulkUpload.photo)
     await callback.message.delete()
     await callback.message.answer(
         "📥 Массовая загрузка аккаунтов.\n\n"
-        "Отправьте одним сообщением список, каждая строка — один аккаунт:\n\n"
+        "Шаг 1 из 2: отправьте фото, которое будет прикреплено ко всем аккаунтам.\n\n"
+        "Или напишите «нет», чтобы загрузить без фото."
+    )
+
+
+@router.message(BulkUpload.photo)
+async def bulk_photo(message: Message, state: FSMContext):
+    photo_id = message.photo[-1].file_id if message.photo else None
+    await state.update_data(photo_id=photo_id)
+    await state.set_state(BulkUpload.wait_data)
+
+    await message.answer(
+        "Шаг 2 из 2: отправьте список аккаунтов.\n\n"
+        "Формат каждой строки:\n"
         "`login;;password;;rank;;100,150,250`\n\n"
         "Где 100,150,250 — цены за 3ч, 6ч и 12ч.\n\n"
         "Пример:\n"
@@ -140,7 +169,10 @@ async def bulk_start(callback: CallbackQuery, state: FSMContext):
 
 
 @router.message(BulkUpload.wait_data)
-async def bulk_process(message: Message, state: FSMContext, session):
+async def bulk_process(message: Message, state: FSMContext, session, funpay: FunPayService):
+    data = await state.get_data()
+    photo_id = data.get("photo_id")
+
     lines = message.text.strip().split("\n")
     created = 0
     errors = []
@@ -165,6 +197,7 @@ async def bulk_process(message: Message, state: FSMContext, session):
             login=login,
             password=password,
             rank=rank,
+            photo_id=photo_id,
             price_3h=prices[0],
             price_6h=prices[1],
             price_12h=prices[2],
@@ -182,6 +215,12 @@ async def bulk_process(message: Message, state: FSMContext, session):
             result += f"\n... и ещё {len(errors) - 10}"
 
     await message.answer(result, reply_markup=admin_menu())
+
+    # НЕМЕДЛЕННО запускаем автосоздание лотов
+    if created > 0:
+        await message.answer("⏳ Создаю лоты на FunPay…")
+        await _trigger_lot_manager(funpay)
+        await message.answer("✅ Лоты обновлены.")
 
 
 # ---------- СПИСОК ----------
@@ -239,7 +278,7 @@ async def delete_menu(callback: CallbackQuery, session):
 
 
 @router.callback_query(F.data.startswith("del|"))
-async def do_delete(callback: CallbackQuery, session):
+async def do_delete(callback: CallbackQuery, session, funpay: FunPayService):
     acc_id = int(callback.data.split("|")[1])
     account = await session.get(Account, acc_id)
 
@@ -251,6 +290,9 @@ async def do_delete(callback: CallbackQuery, session):
     await session.commit()
     await callback.answer(f"✅ Аккаунт #{acc_id} удалён", show_alert=True)
     await _show_delete_menu(callback, session)
+
+    # После удаления тоже обновляем лоты (вдруг последний аккаунт ранга убрали)
+    await _trigger_lot_manager(funpay)
 
 
 # ---------- СПОСОБЫ ОПЛАТЫ ----------
