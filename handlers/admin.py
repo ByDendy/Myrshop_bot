@@ -5,8 +5,10 @@ from aiogram.types import (
 )
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
-from sqlalchemy import select, delete
-from database.models import Account, Lot
+from sqlalchemy import select
+from database.models import Account, PaymentMethod
+from keyboards.inline import admin_payments_keyboard
+from services.settings_service import get_setting, set_setting
 from config import ADMIN_IDS
 
 router = Router()
@@ -16,7 +18,6 @@ class AddAccount(StatesGroup):
     login = State()
     password = State()
     rank = State()
-    description = State()
     photo = State()
     prices = State()
 
@@ -25,12 +26,18 @@ class BulkUpload(StatesGroup):
     wait_data = State()
 
 
+class EditTemplate(StatesGroup):
+    wait_text = State()
+
+
 def admin_menu():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="➕ Добавить аккаунт", callback_data="admin_add")],
         [InlineKeyboardButton(text="📥 Массовая загрузка", callback_data="admin_bulk")],
         [InlineKeyboardButton(text="📋 Список аккаунтов", callback_data="admin_list")],
         [InlineKeyboardButton(text="🗑 Удалить аккаунт", callback_data="admin_delete")],
+        [InlineKeyboardButton(text="💳 Способы оплаты", callback_data="admin_payments")],
+        [InlineKeyboardButton(text="📝 Шаблон описания", callback_data="admin_template")],
     ])
 
 
@@ -46,7 +53,7 @@ async def back_admin(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer("🔧 Админ-панель:", reply_markup=admin_menu())
 
 
-# ---------- ДОБАВЛЕНИЕ (пошаговое) ----------
+# ---------- ДОБАВЛЕНИЕ ----------
 
 @router.callback_query(F.data == "admin_add")
 async def add_start(callback: CallbackQuery, state: FSMContext):
@@ -72,13 +79,6 @@ async def add_password(message: Message, state: FSMContext):
 @router.message(AddAccount.rank)
 async def add_rank(message: Message, state: FSMContext):
     await state.update_data(rank=message.text.strip())
-    await state.set_state(AddAccount.description)
-    await message.answer("Введите описание товара:")
-
-
-@router.message(AddAccount.description)
-async def add_description(message: Message, state: FSMContext):
-    await state.update_data(description=message.text.strip())
     await state.set_state(AddAccount.photo)
     await message.answer("Отправьте фото товара.\nИли напишите «нет», чтобы пропустить.")
 
@@ -109,7 +109,6 @@ async def add_prices(message: Message, state: FSMContext, session):
         login=data["login"],
         password=data["password"],
         rank=data["rank"],
-        description=data["description"],
         photo_id=data["photo_id"],
         price_3h=prices[0],
         price_6h=prices[1],
@@ -162,7 +161,7 @@ async def bulk_process(message: Message, state: FSMContext, session):
             errors.append(f"Строка {i}: цены должны быть три числа через запятую")
             continue
 
-        account = Account(
+        session.add(Account(
             login=login,
             password=password,
             rank=rank,
@@ -170,8 +169,7 @@ async def bulk_process(message: Message, state: FSMContext, session):
             price_6h=prices[1],
             price_12h=prices[2],
             status="free",
-        )
-        session.add(account)
+        ))
         created += 1
 
     await session.commit()
@@ -253,3 +251,91 @@ async def do_delete(callback: CallbackQuery, session):
     await session.commit()
     await callback.answer(f"✅ Аккаунт #{acc_id} удалён", show_alert=True)
     await _show_delete_menu(callback, session)
+
+
+# ---------- СПОСОБЫ ОПЛАТЫ ----------
+
+@router.callback_query(F.data == "admin_payments")
+async def payments_menu(callback: CallbackQuery, session):
+    result = await session.execute(select(PaymentMethod).order_by(PaymentMethod.order))
+    methods = result.scalars().all()
+
+    await callback.message.delete()
+    await callback.message.answer(
+        "💳 Способы оплаты\n\n"
+        "🟢 — включён, 🔴 — выключен.\n"
+        "Нажмите на способ, чтобы переключить:",
+        reply_markup=admin_payments_keyboard(methods),
+    )
+
+
+@router.callback_query(F.data.startswith("toggle_pay|"))
+async def toggle_payment(callback: CallbackQuery, session):
+    method_id = int(callback.data.split("|")[1])
+    method = await session.get(PaymentMethod, method_id)
+
+    if not method:
+        await callback.answer("Способ не найден", show_alert=True)
+        return
+
+    method.enabled = not method.enabled
+    await session.commit()
+
+    result = await session.execute(select(PaymentMethod).order_by(PaymentMethod.order))
+    methods = result.scalars().all()
+
+    status = "включён" if method.enabled else "выключен"
+    await callback.answer(f"{method.name} теперь {status}")
+    await callback.message.edit_reply_markup(
+        reply_markup=admin_payments_keyboard(methods),
+    )
+
+
+# ---------- ШАБЛОН ОПИСАНИЯ ----------
+
+@router.callback_query(F.data == "admin_template")
+async def template_menu(callback: CallbackQuery, session):
+    current = await get_setting(session, "description_template", "")
+
+    await callback.message.delete()
+    await callback.message.answer(
+        "📝 Текущий шаблон описания:\n\n"
+        f"`{current}`\n\n"
+        f"Используйте `{{rank}}` для подстановки ранга аккаунта.\n"
+        f"Шаблон применяется ко всем аккаунтам сразу.",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="✏️ Изменить", callback_data="template_edit")],
+            [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_menu")],
+        ]),
+    )
+
+
+@router.callback_query(F.data == "template_edit")
+async def template_edit(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(EditTemplate.wait_text)
+    await callback.message.delete()
+    await callback.message.answer(
+        "Отправьте новый шаблон описания одним сообщением.\n\n"
+        "Не забудьте про `{rank}` — туда подставится ранг аккаунта.\n"
+        "Пример:\n"
+        "`Аккаунт VALORANT - ранг {rank}`\n"
+        "`Полный доступ — логин, пароль от Riot Games`\n"
+        "`Регион: Россия`",
+        parse_mode="Markdown",
+    )
+
+
+@router.message(EditTemplate.wait_text)
+async def template_save(message: Message, state: FSMContext, session):
+    text = message.text or ""
+    if len(text) < 10:
+        await message.answer("❌ Шаблон слишком короткий. Попробуйте снова.")
+        return
+
+    await set_setting(session, "description_template", text)
+    await state.clear()
+    await message.answer(
+        "✅ Шаблон обновлён! Он сразу применён ко всем аккаунтам.",
+        reply_markup=admin_menu(),
+    )
