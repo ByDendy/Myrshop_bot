@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timedelta
 from sqlalchemy import select
 from aioFunPayAPI import Runner
-from aioFunPayAPI.enums import EventTypes, OrderStatuses
+from aioFunPayAPI.common.enums import EventTypes, OrderStatuses
 from database.models import Account
 from database.session import async_session
 from services.funpay_service import FunPayService
