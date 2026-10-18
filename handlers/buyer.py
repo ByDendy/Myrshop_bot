@@ -2,15 +2,25 @@ from aiogram import Router, F
 from aiogram.types import CallbackQuery
 from sqlalchemy import select, distinct
 from datetime import datetime
-from database.models import Account
+from database.models import Account, PaymentMethod
 from keyboards.inline import (
     ranks_keyboard, accounts_keyboard, rental_keyboard, payment_methods_keyboard,
 )
 from services.funpay_service import FunPayService
 from services.cryptobot_service import CryptoBotService
+from services.settings_service import get_setting
 from config import SUPPORT_USERNAME
 
 router = Router()
+
+
+async def _get_enabled_methods(session):
+    result = await session.execute(
+        select(PaymentMethod)
+        .where(PaymentMethod.enabled.is_(True))
+        .order_by(PaymentMethod.order)
+    )
+    return result.scalars().all()
 
 
 @router.callback_query(F.data == "shop")
@@ -70,10 +80,15 @@ async def view_account(callback: CallbackQuery, session):
         await callback.answer("Этот аккаунт уже занят", show_alert=True)
         return
 
+    # Глобальный шаблон описания с подстановкой ранга
+    template = await get_setting(session, "description_template")
+    if template:
+        desc = template.replace("{rank}", account.rank)
+    else:
+        desc = account.description or f"Аккаунт #{account.id}, ранг {account.rank}"
+
     text = (
-        f"🎮 Аккаунт #{account.id}\n"
-        f"Ранг: {account.rank}\n\n"
-        f"📝 {account.description or 'Без описания'}\n\n"
+        f"{desc}\n\n"
         f"💰 Аренда:\n"
         f"   • 3 часа — {account.price_3h:.0f} ₽\n"
         f"   • 6 часов — {account.price_6h:.0f} ₽\n"
@@ -104,12 +119,20 @@ async def rent_account(callback: CallbackQuery, session):
 
     price = {3: account.price_3h, 6: account.price_6h, 12: account.price_12h}[hours]
 
+    methods = await _get_enabled_methods(session)
+    if not methods:
+        await callback.answer(
+            "😔 Способы оплаты временно недоступны. Свяжитесь с поддержкой.",
+            show_alert=True,
+        )
+        return
+
     await callback.message.delete()
     await callback.message.answer(
         f"Аккаунт #{account.id} ({account.rank})\n"
         f"Аренда на {hours} ч — {price:.0f} ₽\n\n"
         f"Выберите способ оплаты:",
-        reply_markup=payment_methods_keyboard(acc_id, hours),
+        reply_markup=payment_methods_keyboard(methods, acc_id, hours),
     )
 
 
@@ -129,20 +152,27 @@ async def handle_payment(
         await callback.answer("Этот аккаунт уже занят!", show_alert=True)
         return
 
+    # Проверяем, что способ включён
+    method = (await session.execute(
+        select(PaymentMethod).where(
+            PaymentMethod.code == method_code,
+            PaymentMethod.enabled.is_(True),
+        )
+    )).scalar_one_or_none()
+
+    if not method:
+        await callback.answer("Этот способ оплаты недоступен", show_alert=True)
+        return
+
     price = {3: account.price_3h, 6: account.price_6h, 12: account.price_12h}[hours]
 
-    # Резервируем
     account.status = "reserved"
     account.buyer_id = callback.from_user.id
     account.rental_hours = hours
     account.reserved_at = datetime.utcnow()
     await session.commit()
 
-    # ---------- FunPay ----------
     if method_code == "funpay":
-        # Для FunPay мы не создаём новый лот на каждый заказ.
-        # Покупатель должен купить существующий лот нужного ранга и часов.
-        # Здесь просто показываем инструкцию.
         text = (
             f"✅ Аккаунт #{account.id} зарезервирован на {hours} ч!\n\n"
             f"💰 Сумма: {price:.0f} ₽\n"
@@ -150,8 +180,6 @@ async def handle_payment(
             f"«{account.rank} — аренда {hours}ч»\n\n"
             f"После оплаты бот автоматически выдаст данные в чат FunPay."
         )
-        # Снимаем резерв, если оплата не будет произведена (через 15 минут reservation_checker)
-    # ---------- CryptoBot ----------
     elif method_code == "cryptobot":
         try:
             title = f"MyrShop #{account.id} ({account.rank}) — {hours}ч"
