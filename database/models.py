@@ -17,13 +17,11 @@ class Account(Base):
     password: Mapped[str] = mapped_column(String(255), nullable=False)
     rank: Mapped[str] = mapped_column(String(100), nullable=False)
 
-    # Всегда 'free' | 'reserved' | 'rented'
     status: Mapped[str] = mapped_column(String(20), default="free")
 
     description: Mapped[str] = mapped_column(Text, nullable=True)
     photo_id: Mapped[str] = mapped_column(String(255), nullable=True)
 
-    # Цены аренды (только)
     price_3h: Mapped[float] = mapped_column(Float, nullable=False)
     price_6h: Mapped[float] = mapped_column(Float, nullable=False)
     price_12h: Mapped[float] = mapped_column(Float, nullable=False)
@@ -36,12 +34,28 @@ class Account(Base):
 
 
 class Lot(Base):
-    """Один лот FunPay = комбинация (rank, hours)."""
     __tablename__ = "lots"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     rank: Mapped[str] = mapped_column(String(100), nullable=False)
-    hours: Mapped[int] = mapped_column(Integer, nullable=False)  # 3, 6, 12
+    hours: Mapped[int] = mapped_column(Integer, nullable=False)
     price: Mapped[float] = mapped_column(Float, nullable=False)
     funpay_lot_id: Mapped[str] = mapped_column(String(100), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class PaymentMethod(Base):
+    __tablename__ = "payment_methods"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    order: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class Setting(Base):
+    __tablename__ = "settings"
+
+    key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    value: Mapped[str] = mapped_column(Text, nullable=True)
