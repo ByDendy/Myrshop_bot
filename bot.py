@@ -3,7 +3,7 @@ import logging
 import sys
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
-from config import BOT_TOKEN
+from config import BOT_TOKEN, FUNPAY_AUTO_LOTS_ENABLED
 from database.session import init_db, async_session
 from services.funpay_service import FunPayService
 from services.cryptobot_service import CryptoBotService
@@ -47,9 +47,17 @@ async def main():
     asyncio.create_task(payment_checker_loop(bot))
     asyncio.create_task(reservation_checker_loop(cryptobot))
     asyncio.create_task(funpay_watcher_loop(bot, funpay))
-    asyncio.create_task(lot_manager_loop(funpay))
 
-    logging.info("✅ MyrShop запущен: аренда + FunPay + CryptoBot + статусы")
+    if FUNPAY_AUTO_LOTS_ENABLED:
+        asyncio.create_task(lot_manager_loop(funpay))
+        logging.info("✅ Автосоздание лотов FunPay: ВКЛЮЧЕНО")
+    else:
+        logging.warning(
+            "⚠️ Автосоздание лотов FunPay: ВЫКЛЮЧЕНО. "
+            "Лоты нужно создавать вручную на FunPay."
+        )
+
+    logging.info("✅ MyrShop запущен: аренда + FunPay + CryptoBot")
     await dp.start_polling(bot)
 
 
