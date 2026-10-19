@@ -4,16 +4,12 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from aioFunPayAPI import Runner
 
-# ------------------------------------------------------------------
-# Временная замена отсутствующему модулю aioFunPayAPI.enums.
-# Значения взяты из официальной документации библиотеки.
-# ------------------------------------------------------------------
+# Замена отсутствующему модулю aioFunPayAPI.enums
 class EventTypes:
     NEW_ORDER = 6
 
 class OrderStatuses:
     PAID = 0
-# ------------------------------------------------------------------
 
 from database.models import Account
 from database.session import async_session
@@ -22,19 +18,13 @@ from services.notifications import notify_admin
 
 
 async def funpay_watcher_loop(bot, funpay: FunPayService):
-    """
-    Слушает оплаченные заказы FunPay.
-    - Парсит описание лота: "Аренда аккаунта Valorant ранга X на Y часов"
-    - Ищет сначала reserved-аккаунт (приоритет — тот, кто в TG нажал «Купить»)
-    - Если нет — берёт любой свободный нужного ранга
-    - Выдаёт данные и переводит в rented
-    """
     while True:
         try:
             acc = await funpay.get_account()
             runner = Runner(acc)
 
-            async for event in runner.listen(requests_delay=6.0):
+            # Увеличенная задержка опроса — меньше запросов к FunPay
+            async for event in runner.listen(requests_delay=15.0):
                 if event.type != EventTypes.NEW_ORDER:
                     continue
 
@@ -50,12 +40,11 @@ async def funpay_watcher_loop(bot, funpay: FunPayService):
                 rank, hours = _parse_lot_description(desc)
                 if not rank or not hours:
                     logging.warning(
-                        f"Заказ {clean_id}: не удалось распарсить «{desc}»"
+                        f"Заказ {clean_id}: не удалось распарсить «{desc[:100]}»"
                     )
                     continue
 
                 async with async_session() as session:
-                    # 1) Сначала ищем reserved для этого ранга+часов
                     result = await session.execute(
                         select(Account).where(
                             Account.rank == rank,
@@ -65,7 +54,6 @@ async def funpay_watcher_loop(bot, funpay: FunPayService):
                     )
                     account = result.scalar_one_or_none()
 
-                    # 2) Если нет — берём любой свободный
                     if not account:
                         result = await session.execute(
                             select(Account).where(
@@ -77,15 +65,13 @@ async def funpay_watcher_loop(bot, funpay: FunPayService):
 
                     if not account:
                         logging.error(
-                            f"Заказ {clean_id}: нет доступных аккаунтов "
-                            f"для {rank} / {hours}ч"
+                            f"Заказ {clean_id}: нет аккаунтов для {rank} / {hours}ч"
                         )
                         try:
                             await acc.send_message(
                                 order_info.chat_id,
-                                "⚠️ Приносим извинения, свободных аккаунтов "
-                                "данного ранга нет. Напишите в поддержку для "
-                                "возврата средств."
+                                "⚠️ Свободных аккаунтов нет. "
+                                "Напишите в поддержку для возврата.",
                             )
                         except Exception:
                             pass
@@ -105,7 +91,7 @@ async def funpay_watcher_loop(bot, funpay: FunPayService):
                         f"Логин: {account.login}\n"
                         f"Пароль: {account.password}\n"
                         f"Ранг: {account.rank}\n\n"
-                        f"⏱ Аренда действует до: "
+                        f"⏱ Аренда до: "
                         f"{account.rented_until.strftime('%d.%m.%Y %H:%M')} UTC\n\n"
                         f"Смените пароль после первого входа!"
                     )
@@ -120,15 +106,20 @@ async def funpay_watcher_loop(bot, funpay: FunPayService):
                     )
 
         except Exception as e:
-            logging.error(f"funpay_watcher error: {e}")
-            await asyncio.sleep(10)
+            err = str(e)
+            # Логируем коротко, без огромных стеков
+            if "Ошибка запроса" in err:
+                logging.warning(
+                    f"funpay_watcher: FunPay не отвечает корректно, "
+                    f"переподключение через 60 сек"
+                )
+                await asyncio.sleep(60)
+            else:
+                logging.error(f"funpay_watcher error: {err[:300]}")
+                await asyncio.sleep(30)
 
 
 def _parse_lot_description(desc: str):
-    """
-    Ожидаем: "Аренда аккаунта Valorant ранга Diamond 1 на 3 часов."
-    Возвращает (rank, hours) или (None, None).
-    """
     try:
         if "ранга" in desc and " на " in desc and "час" in desc:
             rank = desc.split("ранга ")[1].split(" на ")[0].strip()
