@@ -1,17 +1,34 @@
 import logging
 from aioFunPayAPI import Account as FunPayAccount
-from config import FUNPAY_GOLDEN_KEY, FUNPAY_USER_AGENT, FUNPAY_CATEGORY_ID
+from config import (
+    FUNPAY_GOLDEN_KEY, FUNPAY_USER_AGENT, FUNPAY_CATEGORY_ID, FUNPAY_PROXY,
+)
+
+
+def _build_proxy(proxy_str: str | None):
+    """Преобразует строку прокси в dict для aiohttp."""
+    if not proxy_str:
+        return None
+    return {"http": proxy_str, "https": proxy_str}
 
 
 class FunPayService:
     def __init__(self):
         self.account = None
+        self._proxy = _build_proxy(FUNPAY_PROXY)
 
     async def init(self):
-        self.account = await FunPayAccount(
-            golden_key=FUNPAY_GOLDEN_KEY,
-            user_agent=FUNPAY_USER_AGENT,
-        ).get()
+        kwargs = {
+            "golden_key": FUNPAY_GOLDEN_KEY,
+            "user_agent": FUNPAY_USER_AGENT,
+        }
+        if self._proxy:
+            kwargs["proxy"] = self._proxy
+            logging.info("FunPay: используется прокси")
+        else:
+            logging.info("FunPay: без прокси")
+
+        self.account = await FunPayAccount(**kwargs).get()
 
     async def get_account(self):
         if not self.account:
@@ -19,7 +36,6 @@ class FunPayService:
         return self.account
 
     async def create_lot(self, rank: str, hours: int, price: float) -> str:
-        """Создаёт лот FunPay для комбинации (rank, hours). Возвращает URL лота."""
         if not self.account:
             await self.init()
 
@@ -29,11 +45,8 @@ class FunPayService:
             f"После оплаты данные придут в чат автоматически."
         )
 
-        # save_lot с offer_id=0 создаёт новый лот.
-        # В некоторых версиях aioFunPayAPI метод может называться иначе.
-        lot = await self.account.save_lot(
+        lot = await self.account.create_lot(
             category_id=FUNPAY_CATEGORY_ID,
-            offer_id=0,
             title=title,
             description=description,
             price=price,
@@ -42,10 +55,8 @@ class FunPayService:
         return lot.url
 
     async def delete_lot(self, lot_id: str) -> bool:
-        """Удаляет (деактивирует) лот FunPay."""
         if not self.account:
             await self.init()
-
         try:
             await self.account.save_lot(
                 category_id=FUNPAY_CATEGORY_ID,
