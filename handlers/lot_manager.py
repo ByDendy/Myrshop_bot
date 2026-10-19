@@ -1,28 +1,35 @@
 import asyncio
 import logging
+import random
 from sqlalchemy import select, func
 from database.models import Account, Lot
 from database.session import async_session
 from services.funpay_service import FunPayService
 
 
-CHECK_INTERVAL = 60  # раз в минуту
+# Как часто запускать полный цикл проверки
+CHECK_INTERVAL = 300  # 5 минут
+
+# Задержки между созданиями лотов (секунды)
+DELAY_MIN = 8
+DELAY_MAX = 15
+
+# Задержка, если FunPay вернул ошибку (429 / капча)
+ERROR_DELAY = 60
 
 
 async def run_lot_manager_cycle(funpay: FunPayService):
     """
     Один проход: создать лоты для тех, у кого есть свободные аккаунты,
     и закрыть лоты для тех, у кого свободных аккаунтов не осталось.
-    Вызывается и из фонового цикла, и вручную после добавления аккаунтов.
+    Между запросами к FunPay — случайная задержка, чтобы не словить 429.
     """
     async with async_session() as session:
-        # Уникальные ранги в базе
         combos = await session.execute(select(Account.rank).distinct())
         ranks = [row[0] for row in combos.all()]
 
         for rank in ranks:
             for hours in (3, 6, 12):
-                # Сколько свободных аккаунтов этого ранга?
                 free_result = await session.execute(
                     select(func.count(Account.id)).where(
                         Account.rank == rank,
@@ -31,7 +38,6 @@ async def run_lot_manager_cycle(funpay: FunPayService):
                 )
                 free_count = free_result.scalar() or 0
 
-                # Существующий лот
                 lot_result = await session.execute(
                     select(Lot).where(
                         Lot.rank == rank,
@@ -41,9 +47,7 @@ async def run_lot_manager_cycle(funpay: FunPayService):
                 lot = lot_result.scalar_one_or_none()
 
                 if free_count > 0:
-                    # Нужен активный лот
                     if not lot or not lot.active:
-                        # Берём цену из первого свободного аккаунта
                         acc_result = await session.execute(
                             select(Account).where(
                                 Account.rank == rank,
@@ -78,21 +82,43 @@ async def run_lot_manager_cycle(funpay: FunPayService):
                                 session.add(lot)
                             await session.commit()
                             logging.info(f"📤 Лот создан: {rank} / {hours}ч")
+
+                            # Случайная задержка между лотами
+                            delay = random.uniform(DELAY_MIN, DELAY_MAX)
+                            logging.info(f"⏸ Пауза {delay:.1f} сек перед следующим лотом")
+                            await asyncio.sleep(delay)
+
                         except Exception as e:
-                            logging.error(f"❌ Ошибка создания лота {rank}/{hours}ч: {e}")
+                            err = str(e)
+                            logging.error(
+                                f"❌ Ошибка создания лота {rank}/{hours}ч: {err[:200]}"
+                            )
+                            # Особо долгая пауза при 429 или капче
+                            if "429" in err or "200" in err:
+                                logging.warning(
+                                    f"⏸ FunPay ограничил запросы, "
+                                    f"пауза {ERROR_DELAY} сек"
+                                )
+                                await asyncio.sleep(ERROR_DELAY)
+                            else:
+                                await asyncio.sleep(10)
                 else:
-                    # Свободных нет — лот нужно закрыть
                     if lot and lot.active and lot.funpay_lot_id:
                         try:
                             await funpay.delete_lot(lot.funpay_lot_id)
                             lot.active = False
                             await session.commit()
                             logging.info(f"🗑 Лот закрыт: {rank} / {hours}ч")
+                            await asyncio.sleep(random.uniform(3, 6))
                         except Exception as e:
-                            logging.error(f"❌ Ошибка удаления лота {rank}/{hours}ч: {e}")
+                            logging.error(
+                                f"❌ Ошибка удаления лота {rank}/{hours}ч: {e}"
+                            )
 
 
 async def lot_manager_loop(funpay: FunPayService):
+    # Первый запуск — через минуту, чтобы бот успел инициализироваться
+    await asyncio.sleep(60)
     while True:
         try:
             await run_lot_manager_cycle(funpay)
