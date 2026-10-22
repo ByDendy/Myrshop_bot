@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}#{{ a.id }} {{ a.rank }}{% endblock %}
+{% block content %}
+<div class="flex items-center justify-between mb-2">
+  <a href="/accounts" class="text-blue-600 hover:underline text-sm">← к списку</a>
+  <a href="/accounts/{{ a.id }}/edit"
+     class="text-sm bg-slate-900 text-white px-3 py-1 rounded hover:bg-slate-700">
+    ✏️ Редактировать
+  </a>
+</div>
+
+<h1 class="text-2xl font-bold mb-4">#{{ a.id }} · {{ a.rank }}</h1>
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+  {% if a.photo_id %}
+  <div class="bg-white rounded-lg p-4 shadow flex items-center justify-center">
+    <a href="/api/photo/{{ a.photo_id }}" target="_blank">
+      <img src="/api/photo/{{ a.photo_id }}"
+           class="w-full max-w-xs rounded-lg">
+    </a>
+  </div>
+  {% endif %}
+
+  <div class="bg-white rounded-lg p-4 shadow {% if a.photo_id %}md:col-span-2{% else %}md:col-span-3{% endif %}">
+    <div class="text-sm text-slate-500 mb-2">Данные</div>
+    <div class="font-mono text-sm space-y-1">
+      <div><b>Riot login:</b> {{ a.login }}</div>
+      <div><b>Riot password:</b> {{ a.password }}</div>
+      <div><b>Email:</b> {{ a.email or "—" }}</div>
+      <div><b>Email password:</b> {{ a.email_password or "—" }}</div>
+      <div><b>Статус:</b> {{ a.status }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="bg-white rounded-lg p-4 shadow mb-6">
+  <div class="text-sm text-slate-500 mb-2">
+    Статистика
+    <span class="float-right">
+      <a href="?period=7d" class="mr-2 {% if period == '7d' %}font-bold underline{% endif %}">7д</a>
+      <a href="?period=30d" class="mr-2 {% if period == '30d' %}font-bold underline{% endif %}">30д</a>
+      <a href="?period=all" class="{% if period == 'all' %}font-bold underline{% endif %}">всё</a>
+    </span>
+  </div>
+  <div class="grid grid-cols-3 gap-4 text-sm">
+    <div><div class="text-slate-500">Аренд</div><div class="text-2xl font-bold">{{ rentals }}</div></div>
+    <div><div class="text-slate-500">Часов</div><div class="text-2xl font-bold">{{ hours }}</div></div>
+    <div><div class="text-slate-500">Выручка</div><div class="text-2xl font-bold text-emerald-600">{{ revenue }} ₽</div></div>
+  </div>
+</div>
+
+<h2 class="text-lg font-bold mb-2">История аренд</h2>
+<div class="bg-white rounded-lg shadow overflow-hidden mb-6">
+<table class="w-full text-sm">
+  <thead class="bg-slate-200">
+    <tr>
+      <th class="px-3 py-2 text-left">Начало</th>
+      <th class="px-3 py-2 text-left">Часы</th>
+      <th class="px-3 py-2 text-left">Сумма</th>
+      <th class="px-3 py-2 text-left">Способ</th>
+      <th class="px-3 py-2 text-left">Окончание</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for h in history %}
+    <tr class="border-t">
+      <td class="px-3 py-2">{{ h.started_at.strftime("%d.%m %H:%M") }}</td>
+      <td class="px-3 py-2">{{ h.hours }} ч</td>
+      <td class="px-3 py-2">{{ h.amount }} ₽</td>
+      <td class="px-3 py-2">{{ h.method or "—" }}</td>
+      <td class="px-3 py-2">
+        {% if h.ended_at %}{{ h.ended_at.strftime("%d.%m %H:%M") }} ({{ h.ended_reason }}){% else %}—{% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5" class="px-3 py-4 text-center text-slate-500">Аренд не было</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<form method="post" action="/accounts/{{ a.id }}/delete"
+      onsubmit="return confirm('Удалить аккаунт #{{ a.id }}?')">
+  <button class="text-rose-600 text-sm underline">🗑 Удалить аккаунт</button>
+</form>
+{% endblock %}

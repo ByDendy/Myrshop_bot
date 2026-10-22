@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="ru"><head>
+<meta charset="utf-8"><title>Вход</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head><body class="bg-slate-100 min-h-screen flex items-center justify-center">
+<form method="post" class="bg-white p-8 rounded-lg shadow-md w-80">
+  <h1 class="text-xl font-bold mb-4">MyrShop Admin</h1>
+  <input type="password" name="password" placeholder="Пароль"
+         class="w-full border rounded px-3 py-2 mb-3" autofocus>
+  {% if error %}<p class="text-red-600 text-sm mb-3">{{ error }}</p>{% endif %}
+  <button class="w-full bg-slate-900 text-white py-2 rounded">Войти</button>
+</form>
+</body></html>

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Аккаунты</h1>
+
+<form method="get" class="mb-4 flex gap-2 items-center">
+  <label class="text-sm">Ранг:</label>
+  <select name="rank" class="border rounded px-2 py-1" onchange="this.form.submit()">
+    <option value="">Все</option>
+    {% for r in ranks %}
+      <option value="{{ r }}" {% if r == current_rank %}selected{% endif %}>{{ r }}</option>
+    {% endfor %}
+  </select>
+  <a href="/accounts" class="text-sm text-slate-500 underline">сброс</a>
+</form>
+
+<div class="bg-white rounded-lg shadow overflow-hidden">
+<table class="w-full text-sm">
+  <thead class="bg-slate-200">
+    <tr>
+      <th class="px-3 py-2 text-left">#</th>
+      <th class="px-3 py-2 text-left">Фото</th>
+      <th class="px-3 py-2 text-left">Ранг</th>
+      <th class="px-3 py-2 text-left">Логин</th>
+      <th class="px-3 py-2 text-left">Статус</th>
+      <th class="px-3 py-2 text-left">Цена</th>
+      <th class="px-3 py-2 text-right"></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for a in accounts %}
+    <tr class="border-t">
+      <td class="px-3 py-2">{{ a.id }}</td>
+      <td class="px-3 py-2">
+        {% if a.photo_id %}
+          <img src="/api/photo/{{ a.photo_id }}"
+               class="w-10 h-10 rounded object-cover">
+        {% else %}
+          <div class="w-10 h-10 bg-slate-200 rounded"></div>
+        {% endif %}
+      </td>
+      <td class="px-3 py-2">{{ a.rank }}</td>
+      <td class="px-3 py-2 font-mono">{{ a.login }}</td>
+      <td class="px-3 py-2">
+        {% if a.status == "free" %}<span class="text-emerald-600">🟢 свободен</span>
+        {% elif a.status == "reserved" %}<span class="text-amber-600">🟡 бронь</span>
+        {% elif a.status == "rented" %}<span class="text-blue-600">🟠 аренда</span>
+        {% elif a.status == "awaiting_password_change" %}<span class="text-rose-600">🔑 сменить пароль</span>
+        {% endif %}
+      </td>
+      <td class="px-3 py-2 text-xs">{{ a.price_3h }} / {{ a.price_6h }} / {{ a.price_12h }}</td>
+      <td class="px-3 py-2 text-right">
+        <a href="/accounts/{{ a.id }}" class="text-blue-600 hover:underline">открыть</a>
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="7" class="px-3 py-4 text-center text-slate-500">Пусто</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

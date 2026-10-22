@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-6">Дашборд</h1>
+
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+  <div class="bg-white rounded-lg p-4 shadow">
+    <div class="text-sm text-slate-500">Всего аккаунтов</div>
+    <div class="text-3xl font-bold">{{ accounts_total }}</div>
+  </div>
+  <div class="bg-white rounded-lg p-4 shadow">
+    <div class="text-sm text-slate-500">Активных аренд</div>
+    <div class="text-3xl font-bold text-emerald-600">{{ active }}</div>
+  </div>
+  <div class="bg-white rounded-lg p-4 shadow">
+    <div class="text-sm text-slate-500">Ждут смены пароля</div>
+    <div class="text-3xl font-bold text-amber-600">{{ awaiting }}</div>
+  </div>
+  <div class="bg-white rounded-lg p-4 shadow">
+    <div class="text-sm text-slate-500">Всего аренд</div>
+    <div class="text-3xl font-bold">{{ total_rentals }}</div>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+  <div class="bg-white rounded-lg p-4 shadow">
+    <div class="text-sm text-slate-500">Общее время аренды</div>
+    <div class="text-3xl font-bold">{{ total_hours }} ч</div>
+  </div>
+  <div class="bg-white rounded-lg p-4 shadow">
+    <div class="text-sm text-slate-500">Выручка</div>
+    <div class="text-3xl font-bold text-emerald-600">{{ total_revenue }} ₽</div>
+  </div>
+</div>
+
+<div class="mb-4">
+  <a href="/accounts/add"
+     class="inline-block bg-slate-900 text-white px-5 py-2 rounded hover:bg-slate-700">
+    + Добавить аккаунт
+  </a>
+</div>
+
+<h2 class="text-xl font-bold mt-8 mb-3">Последние аренды</h2>
+<div class="bg-white rounded-lg shadow overflow-hidden">
+<table class="w-full text-sm">
+  <thead class="bg-slate-200">
+    <tr>
+      <th class="px-3 py-2 text-left">Аккаунт</th>
+      <th class="px-3 py-2 text-left">Часы</th>
+      <th class="px-3 py-2 text-left">Сумма</th>
+      <th class="px-3 py-2 text-left">Способ</th>
+      <th class="px-3 py-2 text-left">Начало</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for r in recent %}
+    <tr class="border-t">
+      <td class="px-3 py-2">
+        {% set a = acc_map.get(r.account_id) %}
+        {% if a %}<a href="/accounts/{{ a.id }}" class="text-blue-600 hover:underline">#{{ a.id }} {{ a.rank }}</a>{% else %}—{% endif %}
+      </td>
+      <td class="px-3 py-2">{{ r.hours }} ч</td>
+      <td class="px-3 py-2">{{ r.amount }} ₽</td>
+      <td class="px-3 py-2">{{ r.method }}</td>
+      <td class="px-3 py-2">{{ r.started_at.strftime("%d.%m %H:%M") }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5" class="px-3 py-4 text-center text-slate-500">Пока нет аренд</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

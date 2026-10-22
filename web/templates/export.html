@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">📤 Экспорт</h1>
+
+<div class="bg-white rounded-lg shadow p-6">
+  <p class="mb-4 text-sm text-slate-600">
+    Формат файла: <code>login;;password;;rank;;price_3h,price_6h,price_12h</code><br>
+    Каждая строка — один аккаунт. Такой же формат принимает массовая загрузка в боте.
+  </p>
+  <a href="/export?download=1"
+     class="inline-block bg-slate-900 text-white px-5 py-2 rounded">
+    ⬇️ Скачать accounts.txt
+  </a>
+</div>
+{% endblock %}

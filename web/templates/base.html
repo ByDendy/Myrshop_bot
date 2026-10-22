@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}MyrShop Admin{% endblock %}</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 text-slate-900 min-h-screen">
+<nav class="bg-slate-900 text-white px-6 py-3 flex gap-6 items-center">
+  <a href="/" class="font-bold">MyrShop</a>
+  <a href="/" class="hover:underline">Дашборд</a>
+  <a href="/accounts" class="hover:underline">Аккаунты</a>
+  <a href="/accounts/add" class="hover:underline">+ Добавить</a>
+  <a href="/password-change" class="hover:underline">🔑 Смена пароля</a>
+  <a href="/export" class="hover:underline">📤 Экспорт</a>
+  <a href="/logout" class="ml-auto text-slate-300 hover:text-white">Выйти</a>
+</nav>
+
+<div id="toasts" class="fixed top-4 right-4 space-y-2 z-50"></div>
+
+<main class="max-w-6xl mx-auto p-6">
+  {% block content %}{% endblock %}
+</main>
+
+<script>
+let lastId = 0;
+async function pollNotifications() {
+  try {
+    const r = await fetch(`/api/notifications?since=${lastId}`);
+    const events = await r.json();
+    for (const e of events) {
+      lastId = Math.max(lastId, e.id);
+      showToast(e);
+    }
+  } catch (err) {}
+  setTimeout(pollNotifications, 10000);
+}
+function showToast(e) {
+  const colors = {
+    info: "bg-slate-800", success: "bg-emerald-600",
+    warning: "bg-amber-600", danger: "bg-rose-600",
+  };
+  const div = document.createElement("div");
+  div.className = `${colors[e.level] || colors.info} text-white px-4 py-2 rounded shadow`;
+  div.innerHTML = `<b>${e.title}</b>${e.text ? `<br><small>${e.text}</small>` : ""}`;
+  document.getElementById("toasts").appendChild(div);
+  setTimeout(() => div.remove(), 6000);
+}
+pollNotifications();
+</script>
+</body>
+</html>
