@@ -17,13 +17,10 @@ class Account(Base):
     password: Mapped[str] = mapped_column(String(255), nullable=False)
     rank: Mapped[str] = mapped_column(String(100), nullable=False)
 
-    # Возможные статусы:
-    # free                    — свободен
-    # reserved                — бронь (до 15 мин на оплату)
-    # rented                  — занят до окончания аренды
-    # awaiting_password_change— аренда окончена, ждёт смены пароля
-    status: Mapped[str] = mapped_column(String(30), default="free")
+    email: Mapped[str] = mapped_column(String(255), nullable=True)
+    email_password: Mapped[str] = mapped_column(String(255), nullable=True)
 
+    status: Mapped[str] = mapped_column(String(30), default="free")
     description: Mapped[str] = mapped_column(Text, nullable=True)
     photo_id: Mapped[str] = mapped_column(String(255), nullable=True)
 
@@ -33,7 +30,6 @@ class Account(Base):
 
     lot_id: Mapped[str] = mapped_column(String(100), nullable=True)
     payment_invoice_id: Mapped[str] = mapped_column(String(100), nullable=True)
-
     buyer_id: Mapped[int] = mapped_column(BigInteger, nullable=True)
     rental_hours: Mapped[int] = mapped_column(Integer, nullable=True)
     rented_until: Mapped[datetime] = mapped_column(DateTime, nullable=True)
@@ -41,9 +37,22 @@ class Account(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class RentalHistory(Base):
+    __tablename__ = "rental_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    account_id: Mapped[int] = mapped_column(Integer, ForeignKey("accounts.id"))
+    buyer_id: Mapped[int] = mapped_column(BigInteger, nullable=True)
+    method: Mapped[str] = mapped_column(String(50), nullable=True)  # funpay/cryptobot
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    hours: Mapped[int] = mapped_column(Integer, nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    ended_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    ended_reason: Mapped[str] = mapped_column(String(30), nullable=True)  # expired/cancelled
+
+
 class Lot(Base):
     __tablename__ = "lots"
-
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     rank: Mapped[str] = mapped_column(String(100), nullable=False)
     hours: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -54,7 +63,6 @@ class Lot(Base):
 
 class PaymentMethod(Base):
     __tablename__ = "payment_methods"
-
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -64,6 +72,5 @@ class PaymentMethod(Base):
 
 class Setting(Base):
     __tablename__ = "settings"
-
     key: Mapped[str] = mapped_column(String(100), primary_key=True)
     value: Mapped[str] = mapped_column(Text, nullable=True)
