@@ -2,14 +2,16 @@ import asyncio
 import logging
 from datetime import datetime, timedelta
 from sqlalchemy import select
-from database.models import Account
+
+from database.models import Account, RentalHistory
 from database.session import async_session
 from services.cryptobot_service import CryptoBotService
 from services.notifications import notify_admin
+from web import notifications
 
 
-CHECK_INTERVAL = 30
-EXPIRE_TIMEOUT = 70 * 60
+CHECK_INTERVAL = 30         # как часто опрашивать счета
+EXPIRE_TIMEOUT = 70 * 60    # если CryptoBot не отвечает — освобождаем через 70 минут
 
 
 async def payment_checker_loop(bot):
@@ -21,8 +23,8 @@ async def payment_checker_loop(bot):
                 result = await session.execute(
                     select(Account).where(
                         Account.status == "reserved",
-                        Account.rental_hours.isnot(None),
                         Account.payment_invoice_id.isnot(None),
+                        Account.rental_hours.isnot(None),
                     )
                 )
                 pending = result.scalars().all()
@@ -59,9 +61,33 @@ async def _release_account(session, acc: Account, reason: str):
 
 async def _deliver_account(bot, session, acc: Account):
     hours = acc.rental_hours or 3
+    price = {
+        3: acc.price_3h,
+        6: acc.price_6h,
+        12: acc.price_12h,
+    }.get(hours, acc.price_3h)
+
     acc.status = "rented"
     acc.rented_until = datetime.utcnow() + timedelta(hours=hours)
+    acc.payment_invoice_id = None
+    acc.reserved_at = None
+
+    session.add(RentalHistory(
+        account_id=acc.id,
+        buyer_id=acc.buyer_id,
+        method="cryptobot",
+        amount=price,
+        hours=hours,
+        started_at=datetime.utcnow(),
+    ))
+
     await session.commit()
+
+    notifications.push(
+        "Новая аренда (CryptoBot)",
+        f"#{acc.id} · {acc.rank} · {hours}ч · {price:.0f} ₽",
+        level="success",
+    )
 
     text = (
         f"🎉 Оплата получена! Аккаунт #{acc.id}\n\n"
@@ -79,3 +105,4 @@ async def _deliver_account(bot, session, acc: Account):
         logging.warning(f"Не смог отправить покупателю {acc.buyer_id}: {e}")
 
     await notify_admin(bot, acc)
+    logging.info(f"CryptoBot: аккаунт #{acc.id} выдан (заказ оплачен)")
