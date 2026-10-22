@@ -102,6 +102,7 @@ text
 ```bash
 git clone https://github.com/your-username/myrshop-bot.git
 cd myrshop-bot
+```
 2. Виртуальное окружение
 bash
 python -m venv venv
