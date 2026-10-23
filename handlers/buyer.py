@@ -1,18 +1,19 @@
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
 from sqlalchemy import select, distinct
-from datetime import datetime
-from database.models import Account, PaymentMethod
+from datetime import datetime, timedelta
+from database.models import Account, PaymentMethod, RentalHistory
 from keyboards.inline import (
     ranks_keyboard, accounts_keyboard, rental_keyboard, payment_methods_keyboard,
 )
 from services.funpay_service import FunPayService
 from services.cryptobot_service import CryptoBotService
 from services.settings_service import get_setting
+from services.notifications import notify_admin
+from web import notifications
 from config import SUPPORT_USERNAME
 
 router = Router()
-
 
 async def _get_enabled_methods(session):
     result = await session.execute(
@@ -22,73 +23,49 @@ async def _get_enabled_methods(session):
     )
     return result.scalars().all()
 
-
 @router.callback_query(F.data == "shop")
 async def show_shop(callback: CallbackQuery, session):
     result = await session.execute(
         select(distinct(Account.rank)).where(Account.status == "free")
     )
     ranks = [row[0] for row in result.all()]
-
     if not ranks:
         await callback.answer("😔 Пока нет свободных аккаунтов", show_alert=True)
         return
-
     await callback.message.delete()
-    await callback.message.answer(
-        "🛒 Выберите ранг аккаунта:",
-        reply_markup=ranks_keyboard(ranks),
-    )
-
+    await callback.message.answer("🛒 Выберите ранг аккаунта:", reply_markup=ranks_keyboard(ranks))
 
 @router.callback_query(F.data.startswith("rank|"))
 async def show_accounts(callback: CallbackQuery, session):
     rank = callback.data.split("|", 1)[1]
-
-    result = await session.execute(
-        select(Account).where(Account.rank == rank)
-    )
+    result = await session.execute(select(Account).where(Account.rank == rank))
     accounts = result.scalars().all()
-
     free = [a for a in accounts if a.status == "free"]
     if not free:
         await callback.answer("Все аккаунты этого ранга заняты", show_alert=True)
         return
-
     text = f"📋 Аккаунты ранга {rank}:\n\n"
     for acc in accounts:
         label = {
-            "free": "🟢 Свободен",
-            "reserved": "🟡 Бронь",
-            "rented": "🟠 Арендован",
-            "awaiting_password_change": "🔑 Готовится",
+            "free": "🟢 Свободен", "reserved": "🟡 Бронь",
+            "rented": "🟠 Арендован", "awaiting_password_change": "🔑 Готовится",
         }.get(acc.status, "❓")
         text += f"#{acc.id} — {label}\n"
-
     await callback.message.delete()
-    await callback.message.answer(
-        text, reply_markup=accounts_keyboard(accounts, rank),
-    )
-
+    await callback.message.answer(text, reply_markup=accounts_keyboard(accounts, rank))
 
 @router.callback_query(F.data.startswith("view|"))
 async def view_account(callback: CallbackQuery, session):
     acc_id = int(callback.data.split("|")[1])
     account = await session.get(Account, acc_id)
-
     if not account:
         await callback.answer("Аккаунт не найден", show_alert=True)
         return
     if account.status != "free":
         await callback.answer("Этот аккаунт уже занят", show_alert=True)
         return
-
     template = await get_setting(session, "description_template")
-    if template:
-        desc = template.replace("{rank}", account.rank)
-    else:
-        desc = account.description or f"Аккаунт #{account.id}, ранг {account.rank}"
-
+    desc = template.replace("{rank}", account.rank) if template else f"Аккаунт #{account.id}, ранг {account.rank}"
     text = (
         f"{desc}\n\n"
         f"💰 Аренда:\n"
@@ -96,17 +73,12 @@ async def view_account(callback: CallbackQuery, session):
         f"   • 6 часов — {account.price_6h:.0f} ₽\n"
         f"   • 12 часов — {account.price_12h:.0f} ₽"
     )
-
     kb = rental_keyboard(account)
     await callback.message.delete()
-
     if account.photo_id:
-        await callback.message.answer_photo(
-            photo=account.photo_id, caption=text, reply_markup=kb,
-        )
+        await callback.message.answer_photo(photo=account.photo_id, caption=text, reply_markup=kb)
     else:
         await callback.message.answer(text, reply_markup=kb)
-
 
 @router.callback_query(F.data.startswith("rent|"))
 async def rent_account(callback: CallbackQuery, session):
@@ -114,20 +86,14 @@ async def rent_account(callback: CallbackQuery, session):
     acc_id = int(acc_id_str)
     hours = int(hours_str)
     account = await session.get(Account, acc_id)
-
     if not account or account.status != "free":
         await callback.answer("Этот аккаунт уже занят!", show_alert=True)
         return
-
     price = {3: account.price_3h, 6: account.price_6h, 12: account.price_12h}[hours]
-
     methods = await _get_enabled_methods(session)
     if not methods:
-        await callback.answer(
-            "😔 Способы оплаты временно недоступны.", show_alert=True,
-        )
+        await callback.answer("😔 Способы оплаты временно недоступны.", show_alert=True)
         return
-
     await callback.message.delete()
     await callback.message.answer(
         f"Аккаунт #{account.id} ({account.rank})\n"
@@ -135,7 +101,6 @@ async def rent_account(callback: CallbackQuery, session):
         f"Выберите способ оплаты:",
         reply_markup=payment_methods_keyboard(methods, acc_id, hours),
     )
-
 
 @router.callback_query(F.data.startswith("pay|"))
 async def handle_payment(
@@ -159,16 +124,55 @@ async def handle_payment(
             PaymentMethod.enabled.is_(True),
         )
     )).scalar_one_or_none()
-
     if not method:
         await callback.answer("Этот способ оплаты недоступен", show_alert=True)
         return
 
     price = {3: account.price_3h, 6: account.price_6h, 12: account.price_12h}[hours]
 
+    # ═══════════════════════════════════════════════════════════════
+    # 🧪 ТЕСТОВЫЙ РЕЖИМ
+    # ═══════════════════════════════════════════════════════════════
+    test_mode = await get_setting(session, "test_mode", "0")
+    if test_mode == "1":
+        account.status = "rented"
+        account.buyer_id = callback.from_user.id
+        account.rental_hours = hours
+        account.rented_until = datetime.utcnow() + timedelta(hours=hours)
+        account.reserved_at = None
+        account.payment_invoice_id = None
+
+        session.add(RentalHistory(
+            account_id=account.id,
+            buyer_id=callback.from_user.id,
+            method="test",
+            amount=price,
+            hours=hours,
+            started_at=datetime.utcnow(),
+        ))
+        await session.commit()
+
+        notifications.push("🧪 Тестовая аренда", f"#{account.id} · {account.rank} · {hours}ч", level="warning")
+
+        text = (
+            f"⚠️ **ТЕСТОВЫЙ РЕЖИМ**\n"
+            f"Оплата пропущена, аккаунт выдан!\n\n"
+            f"🎮 Аккаунт #{account.id}\n"
+            f"Логин: `{account.login}`\n"
+            f"Пароль: `{account.password}`\n"
+            f"Ранг: {account.rank}\n\n"
+            f"⏱ Аренда до: {account.rented_until.strftime('%d.%m.%Y %H:%M')} UTC\n\n"
+            f"Смените пароль после первого входа!"
+        )
+        await callback.message.delete()
+        await callback.message.answer(text, parse_mode="Markdown")
+        await notify_admin(callback.bot, account)
+        return
+
+    # ═══════════════════════════════════════════════════════════════
+    # РЕАЛЬНЫЙ РЕЖИМ
+    # ═══════════════════════════════════════════════════════════════
     if method_code == "funpay":
-        # FunPay: НЕ резервируем — лот сам себя регулирует через lot_manager.
-        # Покупатель идёт на FunPay, оплачивает, watcher выдаёт данные.
         text = (
             f"🟡 Оплата через FunPay\n\n"
             f"Аккаунт: {account.rank}, аренда на {hours} ч\n"
@@ -178,7 +182,6 @@ async def handle_payment(
             f"После оплаты бот автоматически выдаст данные в чат FunPay."
         )
     elif method_code == "cryptobot":
-        # CryptoBot: резервируем на 15 минут
         account.status = "reserved"
         account.buyer_id = callback.from_user.id
         account.rental_hours = hours
