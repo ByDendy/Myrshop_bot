@@ -3,11 +3,15 @@ import logging
 import os
 from datetime import datetime
 
-# Берём ключ из переменных окружения Railway
+# Загружаем ключ из переменных окружения Railway
 HENRIK_API_KEY = os.getenv("HENRIK_API_KEY")
 
 async def get_recent_matches(riot_id: str, region: str = "eu", limit: int = 5):
+    # ДИАГНОСТИКА: проверяем, что пришло из базы
+    logging.info(f"Valorant API: вызов для riot_id={riot_id!r}, ключ={'ЕСТЬ' if HENRIK_API_KEY else 'НЕТ'}")
+
     if not riot_id or "#" not in riot_id:
+        logging.warning("Valorant API: riot_id пустой или не содержит '#'")
         return []
 
     if not HENRIK_API_KEY:
@@ -22,29 +26,36 @@ async def get_recent_matches(riot_id: str, region: str = "eu", limit: int = 5):
     
     try:
         async with aiohttp.ClientSession() as session:
-            # Передаём headers в запрос
             async with session.get(url, headers=headers) as resp:
                 if resp.status == 401:
-                    logging.error("Valorant API: неверный HENRIK_API_KEY (401)")
+                    logging.error("Valorant API: неверный HENRIK_API_KEY (401 Unauthorized)")
                     return []
                 if resp.status == 403:
-                    logging.error("Valorant API: доступ запрещён (403) — проверь ключ")
+                    logging.error("Valorant API: доступ запрещён (403 Forbidden) — возможно, ключ не активирован")
+                    return []
+                if resp.status == 404:
+                    logging.warning(f"Valorant API: игрок {riot_id} не найден в регионе {region} (404)")
+                    return []
+                if resp.status == 429:
+                    logging.error("Valorant API: превышен лимит запросов (429 Too Many Requests)")
                     return []
                 if resp.status != 200:
                     text = await resp.text()
                     logging.error(f"Valorant API error {resp.status}: {text[:200]}")
                     return []
+                
                 data = await resp.json()
                 
         matches = data.get("data", [])[:limit]
-        result = []
+        logging.info(f"Valorant API: получено {len(matches)} матчей для {riot_id}")
         
+        result = []
         for m in matches:
             metadata = m.get("metadata", {})
             players = m.get("players", {}).get("all_players", [])
             teams = m.get("teams", {})
             
-            # Ищем именно нашего игрока по name и tag
+            # Ищем именно нашего игрока по name и tag (регистронезависимо)
             player = None
             for p in players:
                 if p.get("name", "").lower() == name.lower() and p.get("tag", "").lower() == tag.lower():
