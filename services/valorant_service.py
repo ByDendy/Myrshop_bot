@@ -7,7 +7,6 @@ from datetime import datetime
 HENRIK_API_KEY = os.getenv("HENRIK_API_KEY")
 
 async def get_recent_matches(riot_id: str, region: str = "eu", limit: int = 5):
-    # ДИАГНОСТИКА: проверяем, что пришло из базы
     logging.info(f"Valorant API: вызов для riot_id={riot_id!r}, ключ={'ЕСТЬ' if HENRIK_API_KEY else 'НЕТ'}")
 
     if not riot_id or "#" not in riot_id:
@@ -21,23 +20,22 @@ async def get_recent_matches(riot_id: str, region: str = "eu", limit: int = 5):
     name, tag = riot_id.split("#", 1)
     url = f"https://api.henrikdev.xyz/valorant/v3/matches/{region}/{name}/{tag}"
     
-    # Заголовок с ключом авторизации
     headers = {"Authorization": HENRIK_API_KEY}
     
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers) as resp:
                 if resp.status == 401:
-                    logging.error("Valorant API: неверный HENRIK_API_KEY (401 Unauthorized)")
+                    logging.error("Valorant API: неверный HENRIK_API_KEY (401)")
                     return []
                 if resp.status == 403:
-                    logging.error("Valorant API: доступ запрещён (403 Forbidden) — возможно, ключ не активирован")
+                    logging.error("Valorant API: доступ запрещён (403)")
                     return []
                 if resp.status == 404:
-                    logging.warning(f"Valorant API: игрок {riot_id} не найден в регионе {region} (404)")
+                    logging.warning(f"Valorant API: игрок {riot_id} не найден (404)")
                     return []
                 if resp.status == 429:
-                    logging.error("Valorant API: превышен лимит запросов (429 Too Many Requests)")
+                    logging.error("Valorant API: превышен лимит (429)")
                     return []
                 if resp.status != 200:
                     text = await resp.text()
@@ -46,47 +44,49 @@ async def get_recent_matches(riot_id: str, region: str = "eu", limit: int = 5):
                 
                 data = await resp.json()
                 
-        matches = data.get("data", [])[:limit]
+        matches = data.get("data") or []
+        matches = matches[:limit]
         logging.info(f"Valorant API: получено {len(matches)} матчей для {riot_id}")
         
         result = []
         for m in matches:
-            metadata = m.get("metadata", {})
-            players = m.get("players", {}).get("all_players", [])
-            teams = m.get("teams", {})
+            metadata = m.get("metadata") or {}
+            players = m.get("players", {}).get("all_players") or []
+            teams = m.get("teams") or {}
             
-            # Ищем именно нашего игрока по name и tag (регистронезависимо)
+            # Ищем именно нашего игрока
             player = None
             for p in players:
-                if p.get("name", "").lower() == name.lower() and p.get("tag", "").lower() == tag.lower():
+                if (p.get("name") or "").lower() == name.lower() and (p.get("tag") or "").lower() == tag.lower():
                     player = p
                     break
             
             if not player:
                 continue
                 
-            agent = player.get("character", "Unknown")
-            map_name = metadata.get("map", "Unknown")
+            agent = player.get("character") or "Unknown"
+            map_name = metadata.get("map") or "Unknown"
             
-            red_score = teams.get("red", {}).get("rounds_won", 0)
-            blue_score = teams.get("blue", {}).get("rounds_won", 0)
+            # Защита от None в счетах
+            red_rounds = (teams.get("red") or {}).get("rounds_won") or 0
+            blue_rounds = (teams.get("blue") or {}).get("rounds_won") or 0
             
-            our_team = player.get("team", "red")
-            our_score = red_score if our_team == "red" else blue_score
-            enemy_score = blue_score if our_team == "red" else red_score
+            our_team = player.get("team") or "red"
+            our_score = red_rounds if our_team == "red" else blue_rounds
+            enemy_score = blue_rounds if our_team == "red" else red_rounds
             win = our_score > enemy_score
             
-            kda = player.get("stats", {})
-            start_time = metadata.get("game_start", 0)
+            kda = player.get("stats") or {}
+            start_time = metadata.get("game_start") or 0
             
             result.append({
                 "agent_name": agent,
                 "map_name": map_name,
                 "score": f"{our_score} : {enemy_score}",
                 "result": "win" if win else "loss",
-                "kills": kda.get("kills", 0),
-                "deaths": kda.get("deaths", 0),
-                "assists": kda.get("assists", 0),
+                "kills": kda.get("kills") or 0,
+                "deaths": kda.get("deaths") or 0,
+                "assists": kda.get("assists") or 0,
                 "time_ago": datetime.fromtimestamp(start_time).strftime('%d.%m %H:%M') if start_time else "Недавно"
             })
         return result
