@@ -13,6 +13,7 @@ from database.models import Account, RentalHistory
 from database.session import async_session
 from web import notifications
 from web.photo_proxy import register_photo_route
+from services.valorant_service import get_recent_matches
 
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -195,10 +196,14 @@ async def account_detail(request: web.Request):
             .limit(20)
         )).scalars().all()
 
+    # Запрашиваем последние матчи
+    recent_matches = await get_recent_matches(account.riot_id) if account.riot_id else []
+
     html = env.get_template("account_detail.html").render(
         a=account, period=period,
         rentals=stats[0], hours=stats[1], revenue=round(stats[2], 2),
         history=history,
+        recent_matches=recent_matches,
     )
     return web.Response(text=html, content_type="text/html")
 
@@ -226,6 +231,7 @@ async def account_add_page(request: web.Request):
                 password=post["password"].strip(),
                 email=(post.get("email") or "").strip() or None,
                 email_password=(post.get("email_password") or "").strip() or None,
+                riot_id=(post.get("riot_id") or "").strip() or None,
                 rank=post["rank"].strip(),
                 tier=post.get("tier", "standard"),
                 price_3h=float(post["price_3h"]),
@@ -280,6 +286,7 @@ async def account_edit_page(request: web.Request):
                 account.password = post["password"].strip()
                 account.email = (post.get("email") or "").strip() or None
                 account.email_password = (post.get("email_password") or "").strip() or None
+                account.riot_id = (post.get("riot_id") or "").strip() or None
                 account.rank = post["rank"].strip()
                 account.tier = post.get("tier", "standard")
                 account.price_3h = float(post["price_3h"])
@@ -373,7 +380,10 @@ async def notifications_page(request: web.Request):
 # ─── Создание приложения ───
 
 def create_web_app(bot):
-    app = web.Application(middlewares=[auth_middleware])
+    app = web.Application(
+        middlewares=[auth_middleware],
+        client_max_size=20 * 1024**2,
+    )
     app["bot"] = bot
 
     app.router.add_get("/login", login_page)
