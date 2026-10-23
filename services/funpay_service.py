@@ -5,8 +5,7 @@ from config import (
 )
 
 
-def _build_proxy(proxy_str: str | None):
-    """Преобразует строку прокси в dict для aiohttp."""
+def _build_proxy(proxy_str):
     if not proxy_str:
         return None
     return {"http": proxy_str, "https": proxy_str}
@@ -24,10 +23,6 @@ class FunPayService:
         }
         if self._proxy:
             kwargs["proxy"] = self._proxy
-            logging.info("FunPay: используется прокси")
-        else:
-            logging.info("FunPay: без прокси")
-
         self.account = await FunPayAccount(**kwargs).get()
 
     async def get_account(self):
@@ -35,13 +30,14 @@ class FunPayService:
             await self.init()
         return self.account
 
-    async def create_lot(self, rank: str, hours: int, price: float) -> str:
+    async def create_lot(self, rank: str, tier: str, hours: int, price: float) -> str:
         if not self.account:
             await self.init()
 
-        title = f"Valorant аккаунт {rank} — аренда {hours}ч"
+        tier_label = "💎 Premium" if tier == "premium" else "🟢 Standard"
+        title = f"Valorant {tier_label} {rank} — аренда {hours}ч"
         description = (
-            f"Аренда аккаунта Valorant ранга {rank} на {hours} часов.\n"
+            f"Аренда аккаунта Valorant ранга {rank} ({tier_label}) на {hours} часов.\n"
             f"После оплаты данные придут в чат автоматически."
         )
 
