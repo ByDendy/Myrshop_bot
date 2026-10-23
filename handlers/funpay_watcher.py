@@ -5,12 +5,14 @@ from sqlalchemy import select
 
 from aioFunPayAPI import Runner
 
-# Замена отсутствующему модулю aioFunPayAPI.enums
+
 class EventTypes:
     NEW_ORDER = 6
 
+
 class OrderStatuses:
     PAID = 0
+
 
 from database.models import Account, RentalHistory
 from database.session import async_session
@@ -20,11 +22,6 @@ from web import notifications
 
 
 async def funpay_watcher_loop(bot, funpay: FunPayService):
-    """
-    Слушает оплаченные заказы FunPay.
-    Парсит описание лота: «Аренда аккаунта Valorant ранга X на Y часов.»
-    Приоритет: сначала reserved, потом free нужного ранга.
-    """
     while True:
         try:
             acc = await funpay.get_account()
@@ -51,7 +48,6 @@ async def funpay_watcher_loop(bot, funpay: FunPayService):
                     continue
 
                 async with async_session() as session:
-                    # 1) reserved под этот ранг+часы
                     result = await session.execute(
                         select(Account).where(
                             Account.rank == rank,
@@ -61,7 +57,6 @@ async def funpay_watcher_loop(bot, funpay: FunPayService):
                     )
                     account = result.scalar_one_or_none()
 
-                    # 2) любой свободный нужного ранга
                     if not account:
                         result = await session.execute(
                             select(Account).where(
@@ -122,8 +117,7 @@ async def funpay_watcher_loop(bot, funpay: FunPayService):
                         f"Пароль: {account.password}\n"
                         f"Ранг: {account.rank}\n\n"
                         f"⏱ Аренда до: "
-                        f"{account.rented_until.strftime('%d.%m.%Y %H:%M')} UTC\n\n"
-                        f"Смените пароль после первого входа!"
+                        f"{account.rented_until.strftime('%d.%m.%Y %H:%M')} UTC"
                     )
                     try:
                         await acc.send_message(order_info.chat_id, funpay_text)
@@ -149,10 +143,6 @@ async def funpay_watcher_loop(bot, funpay: FunPayService):
 
 
 def _parse_lot_description(desc: str):
-    """
-    Ожидаем: «Аренда аккаунта Valorant ранга Diamond 1 на 3 часов.»
-    Возвращает (rank, hours) или (None, None).
-    """
     try:
         if "ранга" in desc and " на " in desc and "час" in desc:
             rank = desc.split("ранга ")[1].split(" на ")[0].strip()
