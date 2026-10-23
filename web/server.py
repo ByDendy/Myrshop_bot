@@ -159,6 +159,7 @@ async def accounts_list(request: web.Request):
 
     html = env.get_template("accounts.html").render(
         accounts=accounts, ranks=ranks, current_rank=rank,
+        timedelta=timedelta,
     )
     return web.Response(text=html, content_type="text/html")
 
@@ -361,6 +362,12 @@ async def notifications_api(request: web.Request):
     return web.json_response(notifications.since(since_id))
 
 
+async def notifications_page(request: web.Request):
+    events = notifications.get_all()
+    html = env.get_template("notifications.html").render(events=events)
+    return web.Response(text=html, content_type="text/html")
+
+
 # ─── Создание приложения ───
 
 def create_web_app(bot):
@@ -385,6 +392,7 @@ def create_web_app(bot):
 
     app.router.add_get("/export", export_page)
     app.router.add_get("/api/notifications", notifications_api)
+    app.router.add_get("/notifications", notifications_page)
 
     register_photo_route(app, bot)
     return app
