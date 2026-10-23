@@ -8,17 +8,25 @@ def main_menu():
     ])
 
 
-def ranks_keyboard(ranks: list):
+def tiers_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🟢 Standard", callback_data="tier|standard")],
+        [InlineKeyboardButton(text="💎 Premium (со скинами)", callback_data="tier|premium")],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="main_menu")],
+    ])
+
+
+def ranks_keyboard(ranks: list, tier: str):
     buttons = []
     for rank in ranks:
         buttons.append([InlineKeyboardButton(
-            text=rank, callback_data=f"rank|{rank}",
+            text=rank, callback_data=f"rank|{tier}|{rank}",
         )])
-    buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="main_menu")])
+    buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="shop")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def accounts_keyboard(accounts: list, rank: str):
+def accounts_keyboard(accounts: list, tier: str):
     buttons = []
     for acc in accounts:
         if acc.status == "free":
@@ -27,7 +35,7 @@ def accounts_keyboard(accounts: list, rank: str):
                 callback_data=f"view|{acc.id}",
             )])
     buttons.append([InlineKeyboardButton(
-        text="◀️ Назад", callback_data="shop",
+        text="◀️ Назад", callback_data=f"tier|{tier}",
     )])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -47,7 +55,7 @@ def rental_keyboard(acc):
             callback_data=f"rent|{acc.id}|12",
         )],
         [InlineKeyboardButton(
-            text="◀️ Назад", callback_data=f"rank|{acc.rank}",
+            text="◀️ Назад", callback_data=f"rank|{acc.tier}|{acc.rank}",
         )],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -57,8 +65,7 @@ def payment_methods_keyboard(methods: list, acc_id: int, hours: int):
     buttons = []
     for m in methods:
         buttons.append([InlineKeyboardButton(
-            text=m.name,
-            callback_data=f"pay|{acc_id}|{hours}|{m.code}",
+            text=m.name, callback_data=f"pay|{acc_id}|{hours}|{m.code}",
         )])
     buttons.append([InlineKeyboardButton(
         text="◀️ Назад", callback_data=f"view|{acc_id}",
@@ -71,10 +78,7 @@ def admin_payments_keyboard(methods: list):
     for m in methods:
         icon = "🟢" if m.enabled else "🔴"
         buttons.append([InlineKeyboardButton(
-            text=f"{icon} {m.name}",
-            callback_data=f"toggle_pay|{m.id}",
+            text=f"{icon} {m.name}", callback_data=f"toggle_pay|{m.id}",
         )])
-    buttons.append([InlineKeyboardButton(
-        text="◀️ Назад", callback_data="admin_menu",
-    )])
+    buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="admin_menu")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
