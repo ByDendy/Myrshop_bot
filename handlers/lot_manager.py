@@ -7,32 +7,26 @@ from database.session import async_session
 from services.funpay_service import FunPayService
 
 
-# Как часто запускать полный цикл проверки
-CHECK_INTERVAL = 300  # 5 минут
-
-# Задержки между созданиями лотов (секунды)
+CHECK_INTERVAL = 300
 DELAY_MIN = 8
 DELAY_MAX = 15
-
-# Задержка, если FunPay вернул ошибку (429 / капча)
 ERROR_DELAY = 60
 
 
 async def run_lot_manager_cycle(funpay: FunPayService):
-    """
-    Один проход: создать лоты для тех, у кого есть свободные аккаунты,
-    и закрыть лоты для тех, у кого свободных аккаунтов не осталось.
-    Между запросами к FunPay — случайная задержка, чтобы не словить 429.
-    """
     async with async_session() as session:
-        combos = await session.execute(select(Account.rank).distinct())
-        ranks = [row[0] for row in combos.all()]
+        # Уникальные комбинации (rank, tier)
+        combos = await session.execute(
+            select(Account.rank, Account.tier).distinct()
+        )
+        pairs = combos.all()
 
-        for rank in ranks:
+        for rank, tier in pairs:
             for hours in (3, 6, 12):
                 free_result = await session.execute(
                     select(func.count(Account.id)).where(
                         Account.rank == rank,
+                        Account.tier == tier,
                         Account.status == "free",
                     )
                 )
@@ -41,6 +35,7 @@ async def run_lot_manager_cycle(funpay: FunPayService):
                 lot_result = await session.execute(
                     select(Lot).where(
                         Lot.rank == rank,
+                        Lot.tier == tier,
                         Lot.hours == hours,
                     )
                 )
@@ -51,6 +46,7 @@ async def run_lot_manager_cycle(funpay: FunPayService):
                         acc_result = await session.execute(
                             select(Account).where(
                                 Account.rank == rank,
+                                Account.tier == tier,
                                 Account.status == "free",
                             ).limit(1)
                         )
@@ -64,7 +60,7 @@ async def run_lot_manager_cycle(funpay: FunPayService):
                         }[hours]
 
                         try:
-                            url = await funpay.create_lot(rank, hours, price)
+                            url = await funpay.create_lot(rank, tier, hours, price)
                             lot_id = url.split("id=")[-1]
 
                             if lot:
@@ -73,32 +69,18 @@ async def run_lot_manager_cycle(funpay: FunPayService):
                                 lot.active = True
                             else:
                                 lot = Lot(
-                                    rank=rank,
-                                    hours=hours,
-                                    price=price,
-                                    funpay_lot_id=lot_id,
-                                    active=True,
+                                    rank=rank, tier=tier, hours=hours,
+                                    price=price, funpay_lot_id=lot_id, active=True,
                                 )
                                 session.add(lot)
                             await session.commit()
-                            logging.info(f"📤 Лот создан: {rank} / {hours}ч")
+                            logging.info(f"📤 Лот создан: {tier} / {rank} / {hours}ч")
 
-                            # Случайная задержка между лотами
-                            delay = random.uniform(DELAY_MIN, DELAY_MAX)
-                            logging.info(f"⏸ Пауза {delay:.1f} сек перед следующим лотом")
-                            await asyncio.sleep(delay)
-
+                            await asyncio.sleep(random.uniform(DELAY_MIN, DELAY_MAX))
                         except Exception as e:
                             err = str(e)
-                            logging.error(
-                                f"❌ Ошибка создания лота {rank}/{hours}ч: {err[:200]}"
-                            )
-                            # Особо долгая пауза при 429 или капче
+                            logging.error(f"❌ Ошибка лота {tier}/{rank}/{hours}ч: {err[:200]}")
                             if "429" in err or "200" in err:
-                                logging.warning(
-                                    f"⏸ FunPay ограничил запросы, "
-                                    f"пауза {ERROR_DELAY} сек"
-                                )
                                 await asyncio.sleep(ERROR_DELAY)
                             else:
                                 await asyncio.sleep(10)
@@ -108,16 +90,13 @@ async def run_lot_manager_cycle(funpay: FunPayService):
                             await funpay.delete_lot(lot.funpay_lot_id)
                             lot.active = False
                             await session.commit()
-                            logging.info(f"🗑 Лот закрыт: {rank} / {hours}ч")
+                            logging.info(f"🗑 Лот закрыт: {tier} / {rank} / {hours}ч")
                             await asyncio.sleep(random.uniform(3, 6))
                         except Exception as e:
-                            logging.error(
-                                f"❌ Ошибка удаления лота {rank}/{hours}ч: {e}"
-                            )
+                            logging.error(f"❌ Ошибка удаления: {e}")
 
 
 async def lot_manager_loop(funpay: FunPayService):
-    # Первый запуск — через минуту, чтобы бот успел инициализироваться
     await asyncio.sleep(60)
     while True:
         try:
