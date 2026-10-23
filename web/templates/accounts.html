@@ -29,10 +29,16 @@
       <td class="font-semibold">{{ a.rank }}</td>
       <td class="font-mono">{{ a.login }}</td>
       <td>
-        {% if a.status == "free" %}<span class="badge b-free"><i data-lucide="check-circle-2" class="w-3 h-3"></i>свободен</span>
-        {% elif a.status == "reserved" %}<span class="badge b-res"><i data-lucide="clock" class="w-3 h-3"></i>бронь</span>
-        {% elif a.status == "rented" %}<span class="badge b-rent"><i data-lucide="flame" class="w-3 h-3"></i>аренда</span>
-        {% elif a.status == "awaiting_password_change" %}<span class="badge b-pw"><i data-lucide="key-round" class="w-3 h-3"></i>сменить пароль</span>
+        {% if a.status == "free" %}
+          <span class="badge b-free"><i data-lucide="check-circle-2" class="w-3 h-3"></i>свободен</span>
+        {% elif a.status == "reserved" %}
+          <span class="badge b-res"><i data-lucide="clock" class="w-3 h-3"></i>бронь</span><br>
+          <span class="text-xs font-mono text-warn timer" data-expire="{{ (a.reserved_at + timedelta(minutes=15)).isoformat() }}Z"></span>
+        {% elif a.status == "rented" %}
+          <span class="badge b-rent"><i data-lucide="flame" class="w-3 h-3"></i>аренда</span><br>
+          <span class="text-xs font-mono text-accent timer" data-expire="{{ a.rented_until.isoformat() }}Z"></span>
+        {% elif a.status == "awaiting_password_change" %}
+          <span class="badge b-pw"><i data-lucide="key-round" class="w-3 h-3"></i>сменить пароль</span>
         {% endif %}</td>
       <td class="font-mono text-xs text-accent">{{ a.price_3h }} / {{ a.price_6h }} / {{ a.price_12h }}</td>
       <td class="text-right"><a href="/accounts/{{ a.id }}" class="link inline-flex items-center gap-1">открыть<i data-lucide="chevron-right" class="w-4 h-4"></i></a></td>
@@ -42,4 +48,35 @@
   {% endfor %}
   </tbody>
 </table></div></div>
+
+<script>
+function updateTimers() {
+    const now = new Date().getTime();
+    document.querySelectorAll('.timer').forEach(el => {
+        const expireStr = el.dataset.expire;
+        if (!expireStr) return;
+
+        const expireTime = new Date(expireStr).getTime();
+        const diff = expireTime - now;
+
+        if (diff <= 0) {
+            el.innerHTML = '⏳ истекает...';
+            el.classList.add('animate-pulse');
+        } else {
+            const h = Math.floor(diff / (1000 * 60 * 60));
+            const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const s = Math.floor((diff % (1000 * 60)) / 1000);
+
+            let parts = [];
+            if (h > 0) parts.push(`${h}ч`);
+            if (m > 0 || h > 0) parts.push(`${m}м`);
+            parts.push(`${s}с`);
+
+            el.innerHTML = `⏳ ${parts.join(' ')}`;
+        }
+    });
+}
+setInterval(updateTimers, 1000);
+updateTimers();
+</script>
 {% endblock %}
