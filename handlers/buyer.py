@@ -161,8 +161,7 @@ async def handle_payment(
             f"Логин: `{account.login}`\n"
             f"Пароль: `{account.password}`\n"
             f"Ранг: {account.rank}\n\n"
-            f"⏱ Аренда до: {account.rented_until.strftime('%d.%m.%Y %H:%M')} UTC\n\n"
-            f"Смените пароль после первого входа!"
+            f"⏱ Аренда до: {account.rented_until.strftime('%d.%m.%Y %H:%M')} UTC"
         )
         await callback.message.delete()
         await callback.message.answer(text, parse_mode="Markdown")
