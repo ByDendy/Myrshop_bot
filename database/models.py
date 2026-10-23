@@ -17,6 +17,9 @@ class Account(Base):
     password: Mapped[str] = mapped_column(String(255), nullable=False)
     rank: Mapped[str] = mapped_column(String(100), nullable=False)
 
+    # standard | premium
+    tier: Mapped[str] = mapped_column(String(20), default="standard")
+
     email: Mapped[str] = mapped_column(String(255), nullable=True)
     email_password: Mapped[str] = mapped_column(String(255), nullable=True)
 
@@ -43,18 +46,19 @@ class RentalHistory(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     account_id: Mapped[int] = mapped_column(Integer, ForeignKey("accounts.id"))
     buyer_id: Mapped[int] = mapped_column(BigInteger, nullable=True)
-    method: Mapped[str] = mapped_column(String(50), nullable=True)  # funpay/cryptobot
+    method: Mapped[str] = mapped_column(String(50), nullable=True)
     amount: Mapped[float] = mapped_column(Float, nullable=False)
     hours: Mapped[int] = mapped_column(Integer, nullable=False)
     started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     ended_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
-    ended_reason: Mapped[str] = mapped_column(String(30), nullable=True)  # expired/cancelled
+    ended_reason: Mapped[str] = mapped_column(String(30), nullable=True)
 
 
 class Lot(Base):
     __tablename__ = "lots"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     rank: Mapped[str] = mapped_column(String(100), nullable=False)
+    tier: Mapped[str] = mapped_column(String(20), default="standard")
     hours: Mapped[int] = mapped_column(Integer, nullable=False)
     price: Mapped[float] = mapped_column(Float, nullable=False)
     funpay_lot_id: Mapped[str] = mapped_column(String(100), nullable=True)
