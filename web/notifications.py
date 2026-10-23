@@ -12,9 +12,14 @@ def push(title: str, text: str = "", level: str = "info"):
         "title": title,
         "text": text,
         "level": level,  # info|warning|success|danger
-        "ts": datetime.utcnow().strftime("%H:%M:%S"),
+        "ts": datetime.utcnow().strftime("%d.%m %H:%M:%S"),
     })
 
 
 def since(event_id: int):
     return [e for e in _events if e["id"] > event_id]
+
+
+def get_all():
+    """Возвращает все уведомления (новые сверху)."""
+    return list(reversed(_events))
