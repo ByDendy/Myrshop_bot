@@ -20,6 +20,8 @@ class Account(Base):
     # standard | premium
     tier: Mapped[str] = mapped_column(String(20), default="standard")
 
+    riot_id: Mapped[str] = mapped_column(String(100), nullable=True)
+
     email: Mapped[str] = mapped_column(String(255), nullable=True)
     email_password: Mapped[str] = mapped_column(String(255), nullable=True)
 
