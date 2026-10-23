@@ -227,6 +227,7 @@ async def account_add_page(request: web.Request):
                 email=(post.get("email") or "").strip() or None,
                 email_password=(post.get("email_password") or "").strip() or None,
                 rank=post["rank"].strip(),
+                tier=post.get("tier", "standard"),
                 price_3h=float(post["price_3h"]),
                 price_6h=float(post["price_6h"]),
                 price_12h=float(post["price_12h"]),
@@ -280,6 +281,7 @@ async def account_edit_page(request: web.Request):
                 account.email = (post.get("email") or "").strip() or None
                 account.email_password = (post.get("email_password") or "").strip() or None
                 account.rank = post["rank"].strip()
+                account.tier = post.get("tier", "standard")
                 account.price_3h = float(post["price_3h"])
                 account.price_6h = float(post["price_6h"])
                 account.price_12h = float(post["price_12h"])
