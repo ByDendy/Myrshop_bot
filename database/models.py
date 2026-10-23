@@ -19,7 +19,8 @@ class Account(Base):
 
     # standard | premium
     tier: Mapped[str] = mapped_column(String(20), default="standard")
-
+    
+    # Riot ID для трекера (например, Player#RU1)
     riot_id: Mapped[str] = mapped_column(String(100), nullable=True)
 
     email: Mapped[str] = mapped_column(String(255), nullable=True)
@@ -58,6 +59,7 @@ class RentalHistory(Base):
 
 class Lot(Base):
     __tablename__ = "lots"
+    
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     rank: Mapped[str] = mapped_column(String(100), nullable=False)
     tier: Mapped[str] = mapped_column(String(20), default="standard")
@@ -69,6 +71,7 @@ class Lot(Base):
 
 class PaymentMethod(Base):
     __tablename__ = "payment_methods"
+    
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -78,5 +81,6 @@ class PaymentMethod(Base):
 
 class Setting(Base):
     __tablename__ = "settings"
+    
     key: Mapped[str] = mapped_column(String(100), primary_key=True)
     value: Mapped[str] = mapped_column(Text, nullable=True)
