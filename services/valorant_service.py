@@ -13,6 +13,8 @@ async def get_recent_matches(riot_id: str, region: str = "eu", limit: int = 5):
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as resp:
                 if resp.status != 200:
+                    text = await resp.text()
+                    logging.error(f"Valorant API error {resp.status}: {text[:200]}")
                     return []
                 data = await resp.json()
                 
@@ -24,7 +26,16 @@ async def get_recent_matches(riot_id: str, region: str = "eu", limit: int = 5):
             players = m.get("players", {}).get("all_players", [])
             teams = m.get("teams", {})
             
-            player = players[0] if players else {}
+            # Ищем именно нашего игрока по name и tag
+            player = None
+            for p in players:
+                if p.get("name", "").lower() == name.lower() and p.get("tag", "").lower() == tag.lower():
+                    player = p
+                    break
+            
+            if not player:
+                continue
+                
             agent = player.get("character", "Unknown")
             map_name = metadata.get("map", "Unknown")
             
@@ -51,5 +62,5 @@ async def get_recent_matches(riot_id: str, region: str = "eu", limit: int = 5):
             })
         return result
     except Exception as e:
-        logging.error(f"Valorant API error: {e}")
+        logging.error(f"Valorant API exception: {e}")
         return []
