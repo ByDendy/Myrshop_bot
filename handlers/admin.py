@@ -16,22 +16,29 @@ from config import ADMIN_IDS
 
 router = Router()
 
+
 class AddAccount(StatesGroup):
+    tier = State()
     login = State()
     password = State()
     rank = State()
     photo = State()
     prices = State()
 
+
 class BulkUpload(StatesGroup):
+    tier = State()
     photo = State()
     wait_data = State()
+
 
 class EditTemplate(StatesGroup):
     wait_text = State()
 
+
 class ChangePassword(StatesGroup):
     new_password = State()
+
 
 async def admin_menu(session):
     test_mode = await get_setting(session, "test_mode", "0")
@@ -49,15 +56,26 @@ async def admin_menu(session):
         [InlineKeyboardButton(text=f"🧪 Тестовый режим: {test_icon}", callback_data="admin_test_mode")],
     ])
 
+
+def tier_keyboard(prefix: str):
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🟢 Standard", callback_data=f"{prefix}|standard")],
+        [InlineKeyboardButton(text="💎 Premium (со скинами)", callback_data=f"{prefix}|premium")],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_menu")],
+    ])
+
+
 async def _trigger_lot_manager(funpay: FunPayService):
     try:
         await run_lot_manager_cycle(funpay)
     except Exception as e:
         logging.error(f"lot_manager после действия админа: {e}")
 
+
 @router.message(Command("admin"), F.from_user.id.in_(ADMIN_IDS))
 async def admin_panel(message: Message, session):
     await message.answer("🔧 Админ-панель:", reply_markup=await admin_menu(session))
+
 
 @router.callback_query(F.data == "admin_menu")
 async def back_admin(callback: CallbackQuery, state: FSMContext, session):
@@ -65,25 +83,34 @@ async def back_admin(callback: CallbackQuery, state: FSMContext, session):
     await callback.message.delete()
     await callback.message.answer("🔧 Админ-панель:", reply_markup=await admin_menu(session))
 
-# ---------- ТЕСТОВЫЙ РЕЖИМ ----------
 
 @router.callback_query(F.data == "admin_test_mode")
 async def toggle_test_mode(callback: CallbackQuery, session):
     current = await get_setting(session, "test_mode", "0")
     new_val = "0" if current == "1" else "1"
     await set_setting(session, "test_mode", new_val)
-    
     status = "ВКЛЮЧЕН" if new_val == "1" else "ВЫКЛЮЧЕН"
     await callback.answer(f"🧪 Тестовый режим {status}", show_alert=True)
     await callback.message.edit_reply_markup(reply_markup=await admin_menu(session))
 
-# ---------- ДОБАВЛЕНИЕ (одиночное) ----------
+
+# ---------- ДОБАВЛЕНИЕ ----------
 
 @router.callback_query(F.data == "admin_add")
 async def add_start(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(AddAccount.tier)
+    await callback.message.delete()
+    await callback.message.answer("Выберите тип аккаунта:", reply_markup=tier_keyboard("add_tier"))
+
+
+@router.callback_query(AddAccount.tier, F.data.startswith("add_tier|"))
+async def add_tier(callback: CallbackQuery, state: FSMContext):
+    tier = callback.data.split("|")[1]
+    await state.update_data(tier=tier)
     await state.set_state(AddAccount.login)
     await callback.message.delete()
     await callback.message.answer("Введите логин аккаунта:")
+
 
 @router.message(AddAccount.login)
 async def add_login(message: Message, state: FSMContext):
@@ -91,11 +118,13 @@ async def add_login(message: Message, state: FSMContext):
     await state.set_state(AddAccount.password)
     await message.answer("Введите пароль:")
 
+
 @router.message(AddAccount.password)
 async def add_password(message: Message, state: FSMContext):
     await state.update_data(password=message.text.strip())
     await state.set_state(AddAccount.rank)
     await message.answer("Введите ранг (например, Diamond 1):")
+
 
 @router.message(AddAccount.rank)
 async def add_rank(message: Message, state: FSMContext):
@@ -103,12 +132,14 @@ async def add_rank(message: Message, state: FSMContext):
     await state.set_state(AddAccount.photo)
     await message.answer("Отправьте фото товара.\nИли напишите «нет», чтобы пропустить.")
 
+
 @router.message(AddAccount.photo)
 async def add_photo(message: Message, state: FSMContext):
     photo_id = message.photo[-1].file_id if message.photo else None
     await state.update_data(photo_id=photo_id)
     await state.set_state(AddAccount.prices)
     await message.answer("Введите цены аренды через пробел: 3ч 6ч 12ч\nПример: 100 150 250")
+
 
 @router.message(AddAccount.prices)
 async def add_prices(message: Message, state: FSMContext, session, funpay: FunPayService):
@@ -124,6 +155,7 @@ async def add_prices(message: Message, state: FSMContext, session, funpay: FunPa
     account = Account(
         login=data["login"], password=data["password"],
         rank=data["rank"], photo_id=data["photo_id"],
+        tier=data["tier"],
         price_3h=prices[0], price_6h=prices[1], price_12h=prices[2],
         status="free",
     )
@@ -134,13 +166,26 @@ async def add_prices(message: Message, state: FSMContext, session, funpay: FunPa
     await message.answer(f"✅ Аккаунт #{account.id} добавлен!", reply_markup=await admin_menu(session))
     await _trigger_lot_manager(funpay)
 
+
 # ---------- МАССОВАЯ ЗАГРУЗКА ----------
 
 @router.callback_query(F.data == "admin_bulk")
 async def bulk_start(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(BulkUpload.tier)
+    await callback.message.delete()
+    await callback.message.answer("Выберите тип для загружаемых аккаунтов:", reply_markup=tier_keyboard("bulk_tier"))
+
+
+@router.callback_query(BulkUpload.tier, F.data.startswith("bulk_tier|"))
+async def bulk_tier(callback: CallbackQuery, state: FSMContext):
+    tier = callback.data.split("|")[1]
+    await state.update_data(tier=tier)
     await state.set_state(BulkUpload.photo)
     await callback.message.delete()
-    await callback.message.answer("📥 Массовая загрузка.\nШаг 1 из 2: отправьте фото для всех аккаунтов.\nИли напишите «нет».")
+    await callback.message.answer(
+        "📥 Шаг 1 из 2: отправьте фото для всех аккаунтов.\nИли напишите «нет»."
+    )
+
 
 @router.message(BulkUpload.photo)
 async def bulk_photo(message: Message, state: FSMContext):
@@ -154,10 +199,12 @@ async def bulk_photo(message: Message, state: FSMContext):
         parse_mode="Markdown",
     )
 
+
 @router.message(BulkUpload.wait_data)
 async def bulk_process(message: Message, state: FSMContext, session, funpay: FunPayService):
     data = await state.get_data()
     photo_id = data.get("photo_id")
+    tier = data.get("tier", "standard")
     lines = message.text.strip().split("\n")
     created = 0
     errors = []
@@ -178,13 +225,14 @@ async def bulk_process(message: Message, state: FSMContext, session, funpay: Fun
 
         session.add(Account(
             login=login, password=password, rank=rank, photo_id=photo_id,
+            tier=tier,
             price_3h=prices[0], price_6h=prices[1], price_12h=prices[2], status="free",
         ))
         created += 1
 
     await session.commit()
     await state.clear()
-    result = f"✅ Загружено: {created}"
+    result = f"✅ Загружено: {created} ({'premium' if tier == 'premium' else 'standard'})"
     if errors:
         result += "\n\n⚠️ Ошибки:\n" + "\n".join(errors[:10])
     await message.answer(result, reply_markup=await admin_menu(session))
@@ -192,26 +240,30 @@ async def bulk_process(message: Message, state: FSMContext, session, funpay: Fun
         await message.answer("⏳ Создаю лоты…")
         await _trigger_lot_manager(funpay)
 
+
 # ---------- СПИСОК / УДАЛЕНИЕ / ОЖИДАНИЕ ----------
 
 @router.callback_query(F.data == "admin_list")
 async def list_accounts(callback: CallbackQuery, session):
-    result = await session.execute(select(Account).order_by(Account.id))
+    result = await session.execute(select(Account).order_by(Account.tier, Account.rank, Account.id))
     accounts = result.scalars().all()
     await callback.message.delete()
     if not accounts:
         await callback.message.answer("📭 Аккаунтов нет.", reply_markup=await admin_menu(session))
         return
     emoji = {"free": "🟢", "reserved": "🟡", "rented": "🟠", "awaiting_password_change": "🔑"}
-    text = "📋 Все аккаунты:\n\n" + "".join(
-        f"{emoji.get(a.status, '❓')} #{a.id} | {a.rank} | {a.login}\n" for a in accounts
-    )
+    text = "📋 Все аккаунты:\n\n"
+    for a in accounts:
+        tier_icon = "💎" if a.tier == "premium" else "🟢"
+        text += f"{emoji.get(a.status, '❓')}{tier_icon} #{a.id} | {a.rank} | {a.login}\n"
     await callback.message.answer(text, reply_markup=await admin_menu(session))
 
-def _delete_keyboard(accounts, test_mode):
-    buttons = [[InlineKeyboardButton(text=f"🗑 #{a.id} — {a.rank}", callback_data=f"del|{a.id}")] for a in accounts]
+
+def _delete_keyboard(accounts):
+    buttons = [[InlineKeyboardButton(text=f"🗑 #{a.id} — {a.rank} ({a.tier})", callback_data=f"del|{a.id}")] for a in accounts]
     buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="admin_menu")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
 
 async def _show_delete_menu(callback: CallbackQuery, session):
     result = await session.execute(select(Account).order_by(Account.id))
@@ -220,11 +272,13 @@ async def _show_delete_menu(callback: CallbackQuery, session):
     if not accounts:
         await callback.message.answer("📭 Нет аккаунтов.", reply_markup=await admin_menu(session))
         return
-    await callback.message.answer("Выберите аккаунт для удаления:", reply_markup=_delete_keyboard(accounts, ""))
+    await callback.message.answer("Выберите аккаунт для удаления:", reply_markup=_delete_keyboard(accounts))
+
 
 @router.callback_query(F.data == "admin_delete")
 async def delete_menu(callback: CallbackQuery, session):
     await _show_delete_menu(callback, session)
+
 
 @router.callback_query(F.data.startswith("del|"))
 async def do_delete(callback: CallbackQuery, session, funpay: FunPayService):
@@ -236,6 +290,7 @@ async def do_delete(callback: CallbackQuery, session, funpay: FunPayService):
     await callback.answer(f"✅ #{acc_id} удалён", show_alert=True)
     await _show_delete_menu(callback, session)
     await _trigger_lot_manager(funpay)
+
 
 @router.callback_query(F.data == "admin_unlock")
 async def unlock_all_reservations(callback: CallbackQuery, session, funpay: FunPayService):
@@ -254,12 +309,15 @@ async def unlock_all_reservations(callback: CallbackQuery, session, funpay: FunP
     if reserved:
         await _trigger_lot_manager(funpay)
 
+
 def _awaiting_keyboard(accounts):
     buttons = []
     for acc in accounts:
-        buttons.append([InlineKeyboardButton(text=f"#{acc.id} — {acc.rank}", callback_data=f"chpw|{acc.id}")])
+        tier_icon = "💎" if acc.tier == "premium" else "🟢"
+        buttons.append([InlineKeyboardButton(text=f"{tier_icon} #{acc.id} — {acc.rank}", callback_data=f"chpw|{acc.id}")])
     buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="admin_menu")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
 
 @router.callback_query(F.data == "admin_awaiting")
 async def awaiting_menu(callback: CallbackQuery, session):
@@ -271,6 +329,7 @@ async def awaiting_menu(callback: CallbackQuery, session):
         return
     await callback.message.answer("🔑 Ожидают смены пароля:", reply_markup=_awaiting_keyboard(accounts))
 
+
 @router.callback_query(F.data.startswith("chpw|"))
 async def change_password_start(callback: CallbackQuery, state: FSMContext):
     acc_id = int(callback.data.split("|")[1])
@@ -278,6 +337,7 @@ async def change_password_start(callback: CallbackQuery, state: FSMContext):
     await state.set_state(ChangePassword.new_password)
     await callback.message.delete()
     await callback.message.answer(f"Введите новый пароль для #{acc_id}:")
+
 
 @router.message(ChangePassword.new_password)
 async def change_password_save(message: Message, state: FSMContext, session, funpay: FunPayService):
@@ -297,6 +357,7 @@ async def change_password_save(message: Message, state: FSMContext, session, fun
     await message.answer(f"✅ Пароль для #{acc_id} обновлён.", reply_markup=await admin_menu(session))
     await _trigger_lot_manager(funpay)
 
+
 # ---------- ОПЛАТА / ШАБЛОН ----------
 
 @router.callback_query(F.data == "admin_payments")
@@ -305,6 +366,7 @@ async def payments_menu(callback: CallbackQuery, session):
     methods = result.scalars().all()
     await callback.message.delete()
     await callback.message.answer("💳 Способы оплаты:", reply_markup=admin_payments_keyboard(methods))
+
 
 @router.callback_query(F.data.startswith("toggle_pay|"))
 async def toggle_payment(callback: CallbackQuery, session):
@@ -317,6 +379,7 @@ async def toggle_payment(callback: CallbackQuery, session):
     methods = result.scalars().all()
     await callback.answer(f"{method.name} теперь {'включён' if method.enabled else 'выключен'}")
     await callback.message.edit_reply_markup(reply_markup=admin_payments_keyboard(methods))
+
 
 @router.callback_query(F.data == "admin_template")
 async def template_menu(callback: CallbackQuery, session):
@@ -331,11 +394,13 @@ async def template_menu(callback: CallbackQuery, session):
         ]),
     )
 
+
 @router.callback_query(F.data == "template_edit")
 async def template_edit(callback: CallbackQuery, state: FSMContext):
     await state.set_state(EditTemplate.wait_text)
     await callback.message.delete()
     await callback.message.answer("Отправьте новый шаблон:")
+
 
 @router.message(EditTemplate.wait_text)
 async def template_save(message: Message, state: FSMContext, session):
