@@ -10,8 +10,8 @@ from services.notifications import notify_admin
 from web import notifications
 
 
-CHECK_INTERVAL = 30         # как часто опрашивать счета
-EXPIRE_TIMEOUT = 70 * 60    # если CryptoBot не отвечает — освобождаем через 70 минут
+CHECK_INTERVAL = 30
+EXPIRE_TIMEOUT = 70 * 60
 
 
 async def payment_checker_loop(bot):
@@ -95,8 +95,7 @@ async def _deliver_account(bot, session, acc: Account):
         f"Пароль: {acc.password}\n"
         f"Ранг: {acc.rank}\n\n"
         f"⏱ Аренда действует до: "
-        f"{acc.rented_until.strftime('%d.%m.%Y %H:%M')} UTC\n\n"
-        f"Смените пароль после первого входа!"
+        f"{acc.rented_until.strftime('%d.%m.%Y %H:%M')} UTC"
     )
 
     try:
