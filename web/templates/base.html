@@ -17,52 +17,75 @@ tailwind.config = { theme: { extend: {
 }}}
 </script>
 <style type="text/tailwindcss">
+  body { background-image: radial-gradient(900px circle at 85% -10%, rgba(242,91,58,.15), transparent 55%), radial-gradient(700px circle at -5% 25%, rgba(242,91,58,.06), transparent 50%); background-attachment: fixed; }
   @layer components {
-    .card { @apply bg-surface border border-line/70 rounded-xl p-4 transition; }
-    .card-hover:hover { @apply border-accent/60 shadow-glow; }
+    .card { @apply p-4; background: linear-gradient(180deg,#2e323b 0%,#252830 100%); border: 1px solid rgba(87,83,77,.7); border-radius: .9rem;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.07), 0 1px 0 rgba(0,0,0,.4), 0 10px 24px -10px rgba(0,0,0,.75);
+            transition: transform .2s, box-shadow .2s, border-color .2s; }
+    .card-hover:hover, .stat:hover { transform: translateY(-3px); border-color: rgba(242,91,58,.6);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 0 0 1px rgba(242,91,58,.35), 0 16px 32px -12px rgba(242,91,58,.4), 0 10px 24px -10px rgba(0,0,0,.8); }
+    .stat { @apply card relative overflow-hidden; }
+    .stat-hot { background: linear-gradient(160deg,rgba(242,91,58,.22) 0%,#2a2a30 55%,#23262d 100%); border-color: rgba(242,91,58,.45); }
+    .stat-hot::before { content:""; position:absolute; inset:0 0 auto 0; height:2px; background:linear-gradient(90deg,transparent,#F25B3A,transparent); }
+    .chip { width:2.25rem; height:2.25rem; border-radius:.65rem; display:grid; place-items:center; color:#F25B3A;
+            background: linear-gradient(145deg,rgba(242,91,58,.3),rgba(242,91,58,.06)); border:1px solid rgba(242,91,58,.4);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 4px 10px -4px rgba(242,91,58,.5); }
+    .chip-mute { color:#A8A29E; background: linear-gradient(145deg,rgba(255,255,255,.08),rgba(255,255,255,.02)); border-color:rgba(255,255,255,.1); box-shadow: inset 0 1px 0 rgba(255,255,255,.12); }
     .label { @apply block text-xs font-medium text-muted mb-1 uppercase tracking-wide; }
-    .input { @apply w-full bg-bg border border-line rounded-lg px-3 py-2 text-sm text-ink placeholder:text-muted/70 outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/30; }
+    .input { @apply w-full border border-line rounded-lg px-3 py-2 text-sm text-ink placeholder:text-muted/70 outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/30;
+             background:#171412; box-shadow: inset 0 2px 5px rgba(0,0,0,.6), 0 1px 0 rgba(255,255,255,.05); }
+    .tier { @apply flex items-center gap-3 rounded-xl border border-line p-3 transition hover:border-accent/60;
+            background: linear-gradient(180deg,#2c2f37,#22252c); box-shadow: inset 0 1px 0 rgba(255,255,255,.07), 0 6px 14px -8px rgba(0,0,0,.8); }
     .btn { @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition; }
-    .btn-primary { @apply bg-accent text-white hover:brightness-110 hover:shadow-glow; }
-    .btn-ghost { @apply border border-line text-ink hover:border-accent hover:text-accent; }
-    .btn-ok { @apply bg-emerald-600 text-white hover:bg-emerald-500; }
-    .btn-danger { @apply border border-rose-500/50 text-bad hover:bg-rose-500/10; }
+    .btn:active { transform: translateY(1px); }
+    .btn-primary { color:#fff; background: linear-gradient(180deg,#ff7a50,#f25b3a 55%,#d9441f);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.35), inset 0 -2px 0 rgba(0,0,0,.18), 0 2px 0 #9c2f12, 0 8px 16px -6px rgba(242,91,58,.6); }
+    .btn-primary:hover { filter: brightness(1.08); transform: translateY(-1px); }
+    .btn-ghost { @apply border border-line text-ink hover:border-accent hover:text-accent;
+            background: linear-gradient(180deg,#30343d,#252830); box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 4px 10px -6px #000; }
+    .btn-ok { color:#fff; background: linear-gradient(180deg,#34d399,#059669 60%,#047857);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 2px 0 #065f46, 0 8px 16px -6px rgba(16,185,129,.5); }
+    .btn-ok:hover { filter: brightness(1.1); }
+    .btn-danger { @apply border border-rose-500/50 text-bad hover:bg-rose-500/10; background: linear-gradient(180deg,rgba(251,113,133,.12),rgba(251,113,133,.03)); box-shadow: inset 0 1px 0 rgba(255,255,255,.06); }
     .tbl { @apply w-full text-sm; }
-    .tbl thead { @apply bg-bg/60 text-muted text-xs uppercase tracking-wide; }
+    .tbl thead { @apply text-muted text-xs uppercase tracking-wide; background: linear-gradient(180deg,#1d1b19,#22201e); box-shadow: inset 0 -1px 0 rgba(255,255,255,.05); }
     .tbl th { @apply px-3 py-2.5 text-left font-medium whitespace-nowrap; }
     .tbl td { @apply px-3 py-2.5 whitespace-nowrap; }
-    .tbl tbody tr { @apply border-t border-line/50 transition-colors; }
-    .tbl tbody tr:hover { @apply bg-accent/5; }
-    .badge { @apply inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border; }
+    .tbl tbody tr { @apply border-t border-line/40 transition; }
+    .tbl tbody tr:hover { background: linear-gradient(90deg,rgba(242,91,58,.12),rgba(242,91,58,.02)); box-shadow: inset 3px 0 0 #F25B3A; }
+    .badge { @apply inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border; box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 2px 8px -3px currentColor; }
     .b-free { @apply text-ok border-ok/40 bg-ok/10; }
     .b-res { @apply text-warn border-warn/40 bg-warn/10; }
     .b-rent { @apply text-accent border-accent/50 bg-accent/10; }
     .b-pw { @apply text-bad border-bad/40 bg-bad/10; }
+    .b-prem { @apply text-violet-300 border-violet-400/40 bg-violet-500/10; }
     .link { @apply text-accent hover:underline; }
     .num { @apply font-mono font-bold tracking-tight; }
+    .navlink { @apply px-3 py-1.5 rounded-lg text-sm text-muted hover:text-ink inline-flex items-center gap-2 transition; }
+    .navlink:hover { background: linear-gradient(180deg,#343842,#2a2d35); box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 4px 10px -6px #000; }
   }
-  @keyframes rise { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:none } }
-  .rise > * { animation: rise .35s ease both; }
+  @keyframes rise { from { opacity:0; transform:translateY(10px) scale(.985) } to { opacity:1; transform:none } }
+  .rise > * { animation: rise .4s cubic-bezier(.2,.8,.2,1) both; }
   .rise > *:nth-child(2){animation-delay:.05s} .rise > *:nth-child(3){animation-delay:.1s}
   .rise > *:nth-child(4){animation-delay:.15s} .rise > *:nth-child(5){animation-delay:.2s}
-  .glow-text { text-shadow: 0 0 24px rgba(242,91,58,.45); }
+  .glow-text { text-shadow: 0 0 24px rgba(242,91,58,.55), 0 2px 0 rgba(0,0,0,.4); }
   @media (prefers-reduced-motion: reduce){ .rise > * { animation:none } }
 </style>
 </head>
 <body class="bg-bg text-ink font-sans min-h-screen antialiased">
-<nav class="sticky top-0 z-40 bg-bg/90 backdrop-blur border-b border-line/70">
+<nav class="sticky top-0 z-40 backdrop-blur border-b border-line/70" style="background:linear-gradient(180deg,rgba(40,43,51,.96),rgba(28,25,23,.94));box-shadow:0 10px 28px -14px #000, inset 0 1px 0 rgba(255,255,255,.05)">
   <div class="max-w-6xl mx-auto px-4 h-14 flex items-center gap-1 overflow-x-auto whitespace-nowrap">
     <a href="/" class="flex items-center gap-2 font-bold mr-4 shrink-0">
-      <span class="w-7 h-7 rounded-lg bg-accent grid place-items-center"><i data-lucide="gamepad-2" class="w-4 h-4 text-white"></i></span>
+      <span class="w-8 h-8 rounded-lg grid place-items-center" style="background:linear-gradient(180deg,#ff7a50,#d9441f);box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 6px 14px -4px rgba(242,91,58,.7)"><i data-lucide="gamepad-2" class="w-4 h-4 text-white"></i></span>
       MyrShop
     </a>
-    <a href="/" class="px-3 py-1.5 rounded-lg text-sm text-muted hover:text-ink hover:bg-surface inline-flex items-center gap-2"><i data-lucide="layout-dashboard" class="w-4 h-4"></i>Дашборд</a>
-    <a href="/accounts" class="px-3 py-1.5 rounded-lg text-sm text-muted hover:text-ink hover:bg-surface inline-flex items-center gap-2"><i data-lucide="users" class="w-4 h-4"></i>Аккаунты</a>
-    <a href="/accounts/add" class="px-3 py-1.5 rounded-lg text-sm text-muted hover:text-ink hover:bg-surface inline-flex items-center gap-2"><i data-lucide="plus" class="w-4 h-4"></i>Добавить</a>
-    <a href="/password-change" class="px-3 py-1.5 rounded-lg text-sm text-muted hover:text-ink hover:bg-surface inline-flex items-center gap-2"><i data-lucide="key-round" class="w-4 h-4"></i>Смена пароля</a>
-    <a href="/notifications" class="px-3 py-1.5 rounded-lg text-sm text-muted hover:text-ink hover:bg-surface inline-flex items-center gap-2"><i data-lucide="bell" class="w-4 h-4"></i>Уведомления</a>
-    <a href="/export" class="px-3 py-1.5 rounded-lg text-sm text-muted hover:text-ink hover:bg-surface inline-flex items-center gap-2"><i data-lucide="upload" class="w-4 h-4"></i>Экспорт</a>
-    <a href="/logout" class="ml-auto px-3 py-1.5 rounded-lg text-sm text-muted hover:text-accent inline-flex items-center gap-2 shrink-0"><i data-lucide="log-out" class="w-4 h-4"></i>Выйти</a>
+    <a href="/" class="navlink"><i data-lucide="layout-dashboard" class="w-4 h-4"></i>Дашборд</a>
+    <a href="/accounts" class="navlink"><i data-lucide="users" class="w-4 h-4"></i>Аккаунты</a>
+    <a href="/accounts/add" class="navlink"><i data-lucide="plus" class="w-4 h-4"></i>Добавить</a>
+    <a href="/password-change" class="navlink"><i data-lucide="key-round" class="w-4 h-4"></i>Смена пароля</a>
+    <a href="/notifications" class="navlink"><i data-lucide="bell" class="w-4 h-4"></i>Уведомления</a>
+    <a href="/export" class="navlink"><i data-lucide="upload" class="w-4 h-4"></i>Экспорт</a>
+    <a href="/logout" class="navlink ml-auto hover:!text-accent shrink-0"><i data-lucide="log-out" class="w-4 h-4"></i>Выйти</a>
   </div>
 </nav>
 
@@ -90,13 +113,14 @@ async function pollNotifications() {
 }
 function showToast(e) {
   const styles = {
-    info:    "border-line bg-surface",
-    success: "border-ok/60 bg-surface shadow-[0_0_16px_rgba(74,222,128,.2)]",
-    warning: "border-accent/70 bg-surface shadow-glow",
-    danger:  "border-bad/60 bg-surface shadow-[0_0_16px_rgba(251,113,133,.2)]",
+    info:    "border-line",
+    success: "border-ok/60 shadow-[0_0_16px_rgba(74,222,128,.2)]",
+    warning: "border-accent/70 shadow-glow",
+    danger:  "border-bad/60 shadow-[0_0_16px_rgba(251,113,133,.2)]",
   };
   const div = document.createElement("div");
-  div.className = `${styles[e.level] || styles.info} border-l-4 text-ink px-4 py-3 rounded-lg text-sm transition`;
+  div.style.cssText = "background:linear-gradient(180deg,#2e323b,#252830);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 14px 30px -10px #000";
+  div.className = `${styles[e.level] || styles.info} border border-l-4 text-ink px-4 py-3 rounded-lg text-sm transition`;
   div.innerHTML = `<b>${e.title}</b>${e.text ? `<br><small class="text-muted">${e.text}</small>` : ""}`;
   document.getElementById("toasts").appendChild(div);
   setTimeout(() => { div.style.opacity = 0; setTimeout(() => div.remove(), 300); }, 6000);

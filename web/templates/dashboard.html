@@ -6,18 +6,18 @@
 </div>
 
 <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3 rise">
-  <div class="card"><div class="label">Всего аккаунтов</div><div class="num text-3xl">{{ accounts_total }}</div></div>
-  <div class="card border-accent/50"><div class="label">Активных аренд</div><div class="num text-4xl text-accent glow-text">{{ active }}</div></div>
-  <div class="card"><div class="label">Ждут смены пароля</div><div class="num text-3xl text-warn">{{ awaiting }}</div></div>
-  <div class="card"><div class="label">Всего аренд</div><div class="num text-3xl">{{ total_rentals }}</div></div>
+  <div class="stat"><div class="flex justify-between items-start mb-2"><div class="label">Всего аккаунтов</div><span class="chip chip-mute"><i data-lucide="layers" class="w-4 h-4"></i></span></div><div class="num text-3xl">{{ accounts_total }}</div></div>
+  <div class="stat stat-hot"><div class="flex justify-between items-start mb-2"><div class="label">Активных аренд</div><span class="chip"><i data-lucide="flame" class="w-4 h-4"></i></span></div><div class="num text-4xl text-accent glow-text">{{ active }}</div></div>
+  <div class="stat"><div class="flex justify-between items-start mb-2"><div class="label">Ждут смены пароля</div><span class="chip chip-mute"><i data-lucide="key-round" class="w-4 h-4 text-warn"></i></span></div><div class="num text-3xl text-warn">{{ awaiting }}</div></div>
+  <div class="stat"><div class="flex justify-between items-start mb-2"><div class="label">Всего аренд</div><span class="chip chip-mute"><i data-lucide="repeat" class="w-4 h-4"></i></span></div><div class="num text-3xl">{{ total_rentals }}</div></div>
 </div>
 
 <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-8 rise">
-  <div class="card"><div class="label">Общее время аренды</div><div class="num text-3xl">{{ total_hours }} <span class="text-muted text-xl">ч</span></div></div>
-  <div class="card border-accent/50"><div class="label">Выручка</div><div class="num text-4xl text-accent glow-text">{{ total_revenue }} ₽</div></div>
+  <div class="stat"><div class="flex justify-between items-start mb-2"><div class="label">Общее время аренды</div><span class="chip chip-mute"><i data-lucide="timer" class="w-4 h-4"></i></span></div><div class="num text-3xl">{{ total_hours }} <span class="text-muted text-xl">ч</span></div></div>
+  <div class="stat stat-hot"><div class="flex justify-between items-start mb-2"><div class="label">Выручка</div><span class="chip"><i data-lucide="wallet" class="w-4 h-4"></i></span></div><div class="num text-4xl text-accent glow-text">{{ total_revenue }} ₽</div></div>
 </div>
 
-<h2 class="text-lg font-semibold mb-3 flex items-center gap-2"><i data-lucide="history" class="w-5 h-5 text-accent"></i>Последние аренды</h2>
+<h2 class="text-lg font-semibold mb-3 flex items-center gap-2"><span class="chip !w-8 !h-8"><i data-lucide="history" class="w-4 h-4"></i></span>Последние аренды</h2>
 <div class="card p-0 overflow-hidden"><div class="overflow-x-auto">
 <table class="tbl">
   <thead><tr><th>Аккаунт</th><th>Часы</th><th>Сумма</th><th>Способ</th><th>Начало</th></tr></thead>
