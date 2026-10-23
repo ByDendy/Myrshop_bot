@@ -4,7 +4,8 @@ from sqlalchemy import select, distinct
 from datetime import datetime, timedelta
 from database.models import Account, PaymentMethod, RentalHistory
 from keyboards.inline import (
-    ranks_keyboard, accounts_keyboard, rental_keyboard, payment_methods_keyboard,
+    tiers_keyboard, ranks_keyboard, accounts_keyboard,
+    rental_keyboard, payment_methods_keyboard,
 )
 from services.funpay_service import FunPayService
 from services.cryptobot_service import CryptoBotService
@@ -15,6 +16,7 @@ from config import SUPPORT_USERNAME
 
 router = Router()
 
+
 async def _get_enabled_methods(session):
     result = await session.execute(
         select(PaymentMethod)
@@ -23,36 +25,67 @@ async def _get_enabled_methods(session):
     )
     return result.scalars().all()
 
+
 @router.callback_query(F.data == "shop")
-async def show_shop(callback: CallbackQuery, session):
+async def show_shop(callback: CallbackQuery):
+    await callback.message.delete()
+    await callback.message.answer(
+        "🛒 Выберите категорию аккаунтов:",
+        reply_markup=tiers_keyboard(),
+    )
+
+
+@router.callback_query(F.data.startswith("tier|"))
+async def show_ranks(callback: CallbackQuery, session):
+    tier = callback.data.split("|")[1]
     result = await session.execute(
-        select(distinct(Account.rank)).where(Account.status == "free")
+        select(distinct(Account.rank)).where(
+            Account.tier == tier,
+            Account.status == "free",
+        )
     )
     ranks = [row[0] for row in result.all()]
     if not ranks:
-        await callback.answer("😔 Пока нет свободных аккаунтов", show_alert=True)
+        await callback.answer(
+            "😔 В этой категории пока нет свободных аккаунтов", show_alert=True,
+        )
         return
+
+    title = "💎 Premium" if tier == "premium" else "🟢 Standard"
     await callback.message.delete()
-    await callback.message.answer("🛒 Выберите ранг аккаунта:", reply_markup=ranks_keyboard(ranks))
+    await callback.message.answer(
+        f"{title}\n\nВыберите ранг:",
+        reply_markup=ranks_keyboard(ranks, tier),
+    )
+
 
 @router.callback_query(F.data.startswith("rank|"))
 async def show_accounts(callback: CallbackQuery, session):
-    rank = callback.data.split("|", 1)[1]
-    result = await session.execute(select(Account).where(Account.rank == rank))
+    _, tier, rank = callback.data.split("|", 2)
+    result = await session.execute(
+        select(Account).where(
+            Account.rank == rank,
+            Account.tier == tier,
+        )
+    )
     accounts = result.scalars().all()
+
     free = [a for a in accounts if a.status == "free"]
     if not free:
         await callback.answer("Все аккаунты этого ранга заняты", show_alert=True)
         return
-    text = f"📋 Аккаунты ранга {rank}:\n\n"
+
+    text = f"📋 Аккаунты {rank}:\n\n"
     for acc in accounts:
         label = {
             "free": "🟢 Свободен", "reserved": "🟡 Бронь",
             "rented": "🟠 Арендован", "awaiting_password_change": "🔑 Готовится",
         }.get(acc.status, "❓")
         text += f"#{acc.id} — {label}\n"
+
     await callback.message.delete()
-    await callback.message.answer(text, reply_markup=accounts_keyboard(accounts, rank))
+    await callback.message.answer(text, reply_markup=accounts_keyboard(accounts, tier))
+
 
 @router.callback_query(F.data.startswith("view|"))
 async def view_account(callback: CallbackQuery, session):
@@ -64,10 +97,13 @@ async def view_account(callback: CallbackQuery, session):
     if account.status != "free":
         await callback.answer("Этот аккаунт уже занят", show_alert=True)
         return
+
     template = await get_setting(session, "description_template")
     desc = template.replace("{rank}", account.rank) if template else f"Аккаунт #{account.id}, ранг {account.rank}"
+    tier_text = "💎 Premium" if account.tier == "premium" else "🟢 Standard"
+
     text = (
-        f"{desc}\n\n"
+        f"{tier_text}\n{desc}\n\n"
         f"💰 Аренда:\n"
         f"   • 3 часа — {account.price_3h:.0f} ₽\n"
         f"   • 6 часов — {account.price_6h:.0f} ₽\n"
@@ -79,6 +115,7 @@ async def view_account(callback: CallbackQuery, session):
         await callback.message.answer_photo(photo=account.photo_id, caption=text, reply_markup=kb)
     else:
         await callback.message.answer(text, reply_markup=kb)
+
 
 @router.callback_query(F.data.startswith("rent|"))
 async def rent_account(callback: CallbackQuery, session):
@@ -101,6 +138,7 @@ async def rent_account(callback: CallbackQuery, session):
         f"Выберите способ оплаты:",
         reply_markup=payment_methods_keyboard(methods, acc_id, hours),
     )
+
 
 @router.callback_query(F.data.startswith("pay|"))
 async def handle_payment(
@@ -130,9 +168,6 @@ async def handle_payment(
 
     price = {3: account.price_3h, 6: account.price_6h, 12: account.price_12h}[hours]
 
-    # ═══════════════════════════════════════════════════════════════
-    # 🧪 ТЕСТОВЫЙ РЕЖИМ
-    # ═══════════════════════════════════════════════════════════════
     test_mode = await get_setting(session, "test_mode", "0")
     if test_mode == "1":
         account.status = "rented"
@@ -168,9 +203,6 @@ async def handle_payment(
         await notify_admin(callback.bot, account)
         return
 
-    # ═══════════════════════════════════════════════════════════════
-    # РЕАЛЬНЫЙ РЕЖИМ
-    # ═══════════════════════════════════════════════════════════════
     if method_code == "funpay":
         text = (
             f"🟡 Оплата через FunPay\n\n"
