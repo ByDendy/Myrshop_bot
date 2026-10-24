@@ -56,6 +56,7 @@ class Partner(Base):
     telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False)
     username: Mapped[str] = mapped_column(String(100), nullable=True)
     full_name: Mapped[str] = mapped_column(String(255), nullable=True)
+    avatar_id: Mapped[str] = mapped_column(String(255), nullable=True)
 
     commission_percent: Mapped[float] = mapped_column(Float, nullable=True)
 
@@ -127,9 +128,12 @@ class Customer(Base):
     telegram_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     username: Mapped[str] = mapped_column(String(100), nullable=True)
     first_name: Mapped[str] = mapped_column(String(255), nullable=True)
+    avatar_id: Mapped[str] = mapped_column(String(255), nullable=True)
     is_banned: Mapped[bool] = mapped_column(Boolean, default=False)
     ban_reason: Mapped[str] = mapped_column(Text, nullable=True)
     banned_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    agreed_to_terms: Mapped[bool] = mapped_column(Boolean, default=False)
+    agreed_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
