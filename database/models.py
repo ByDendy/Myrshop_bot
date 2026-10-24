@@ -23,8 +23,6 @@ class Account(Base):
     email: Mapped[str] = mapped_column(String(255), nullable=True)
     email_password: Mapped[str] = mapped_column(String(255), nullable=True)
 
-    # Статусы: free | reserved | rented | awaiting_password_change |
-    #          pending_approval | rejected | awaiting_review | awaiting_approval
     status: Mapped[str] = mapped_column(String(30), default="free")
     description: Mapped[str] = mapped_column(Text, nullable=True)
     photo_id: Mapped[str] = mapped_column(String(255), nullable=True)
@@ -33,7 +31,6 @@ class Account(Base):
     price_6h: Mapped[float] = mapped_column(Float, nullable=False)
     price_12h: Mapped[float] = mapped_column(Float, nullable=False)
 
-    # ─── Партнёрские поля ───
     partner_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("partners.id"), nullable=True,
     )
@@ -60,7 +57,6 @@ class Partner(Base):
     username: Mapped[str] = mapped_column(String(100), nullable=True)
     full_name: Mapped[str] = mapped_column(String(255), nullable=True)
 
-    # Если NULL — используется глобальная комиссия из settings
     commission_percent: Mapped[float] = mapped_column(Float, nullable=True)
 
     balance: Mapped[float] = mapped_column(Float, default=0.0)
@@ -94,7 +90,6 @@ class PartnerEarning(Base):
     )
     amount: Mapped[float] = mapped_column(Float, nullable=False)
     platform_amount: Mapped[float] = mapped_column(Float, nullable=False)
-    # frozen | available | paid | refunded
     status: Mapped[str] = mapped_column(String(20), default="frozen")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     paid_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
@@ -106,7 +101,6 @@ class PartnerPayout(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     partner_id: Mapped[int] = mapped_column(Integer, ForeignKey("partners.id"))
     amount: Mapped[float] = mapped_column(Float, nullable=False)
-    # requested | paid | rejected
     status: Mapped[str] = mapped_column(String(20), default="requested")
     requested_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     paid_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
@@ -154,3 +148,15 @@ class Setting(Base):
 
     key: Mapped[str] = mapped_column(String(100), primary_key=True)
     value: Mapped[str] = mapped_column(Text, nullable=True)
+
+
+class Customer(Base):
+    __tablename__ = "customers"
+
+    telegram_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    username: Mapped[str] = mapped_column(String(100), nullable=True)
+    first_name: Mapped[str] = mapped_column(String(255), nullable=True)
+    is_banned: Mapped[bool] = mapped_column(Boolean, default=False)
+    ban_reason: Mapped[str] = mapped_column(Text, nullable=True)
+    banned_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
