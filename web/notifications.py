@@ -5,15 +5,18 @@ _events = deque(maxlen=200)
 _counter = {"id": 0}
 
 
-def push(title: str, text: str = "", level: str = "info", category: str = "general"):
+def push(title: str, text: str = "", level: str = "info", category: str = "general", url: str = None):
     _counter["id"] += 1
+    now = datetime.utcnow()
     _events.append({
         "id": _counter["id"],
         "title": title,
         "text": text,
         "level": level,
         "category": category,
-        "ts": datetime.utcnow().strftime("%d.%m %H:%M:%S"),
+        "url": url,
+        "ts": now.strftime("%d.%m %H:%M:%S"),
+        "ts_iso": now.isoformat() + "Z",
     })
 
 
