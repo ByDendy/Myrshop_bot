@@ -17,6 +17,7 @@ from keyboards.inline import (
     partner_accounts_keyboard, partner_back_to_main,
 )
 from services.partner_service import request_payout
+from services.avatar_service import refresh_avatar
 from config import ADMIN_IDS, WEB_SECRET_KEY, WEB_BASE_URL
 
 router = Router()
@@ -77,6 +78,11 @@ async def partner_main(callback: CallbackQuery, session):
         )
         return
 
+    # Обновляем аватарку, если её ещё нет
+    if not partner.avatar_id:
+        if await refresh_avatar(callback.bot, partner):
+            await session.commit()
+
     # Генерируем "магическую ссылку" на 15 минут
     serializer = URLSafeTimedSerializer(WEB_SECRET_KEY, salt="web-session")
     token = serializer.dumps({"type": "partner", "id": partner.id})
@@ -110,6 +116,11 @@ async def partner_register(callback: CallbackQuery, session):
         status="active",
     )
     session.add(partner)
+    await session.flush() # Получаем partner.id до коммита
+
+    # Загружаем аватарку при регистрации
+    await refresh_avatar(callback.bot, partner)
+    
     await session.commit()
 
     await callback.message.delete()
