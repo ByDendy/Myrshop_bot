@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Настройки{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-6">⚙️ Настройки</h1>
+
+{% if error %}
+  <div class="bg-rose-100 text-rose-700 p-3 rounded mb-4 border border-rose-200">
+    {{ error }}
+  </div>
+{% endif %}
+{% if success %}
+  <div class="bg-emerald-100 text-emerald-700 p-3 rounded mb-4 border border-emerald-200">
+    {{ success }}
+  </div>
+{% endif %}
+
+<!-- Комиссия -->
+<div class="bg-white rounded-lg shadow p-6 mb-6">
+  <h2 class="text-lg font-bold mb-4">💰 Комиссия платформы</h2>
+  <form method="post" class="flex flex-wrap items-end gap-4">
+    <input type="hidden" name="action" value="save_commission">
+    <div>
+      <label class="text-sm text-slate-600 block mb-1">Платформе (%)</label>
+      <input type="number" name="commission" value="{{ commission }}"
+             min="0" max="100" step="0.1"
+             class="border rounded px-3 py-2 w-32 font-mono">
+    </div>
+    <div class="text-sm text-slate-600 pb-2">
+      Партнёру: <b class="text-emerald-600">{{ partner_share }}%</b>
+    </div>
+    <button class="bg-slate-900 text-white px-4 py-2 rounded hover:bg-slate-700">
+      Сохранить
+    </button>
+  </form>
+  <p class="text-xs text-slate-500 mt-3">
+    Изменение не влияет на уже оформленные аренды. Новые аренды — по новой ставке.
+  </p>
+</div>
+
+<!-- Минимальные цены -->
+<div class="bg-white rounded-lg shadow p-6">
+  <h2 class="text-lg font-bold mb-4">🏆 Минимальные цены по рангам</h2>
+
+  {% if ranks %}
+  <div class="overflow-hidden border rounded-lg mb-4">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-100">
+        <tr>
+          <th class="px-3 py-2 text-left">Ранг</th>
+          <th class="px-3 py-2 text-left">3ч ₽</th>
+          <th class="px-3 py-2 text-left">6ч ₽</th>
+          <th class="px-3 py-2 text-left">12ч ₽</th>
+          <th class="px-3 py-2"></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in ranks %}
+        <tr class="border-t">
+          <td class="px-3 py-2 font-medium">{{ r.rank }}</td>
+          <td class="px-3 py-2 font-mono">{{ r.min_price_3h|round(0)|int }}</td>
+          <td class="px-3 py-2 font-mono">{{ r.min_price_6h|round(0)|int }}</td>
+          <td class="px-3 py-2 font-mono">{{ r.min_price_12h|round(0)|int }}</td>
+          <td class="px-3 py-2 text-right">
+            <form method="post" onsubmit="return confirm('Удалить {{ r.rank }}?')" class="inline">
+              <input type="hidden" name="action" value="delete_rank">
+              <input type="hidden" name="rank_id" value="{{ r.id }}">
+              <button class="text-rose-600 text-sm underline hover:text-rose-800">🗑</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-slate-500 text-sm mb-4">Ранги не настроены. Добавь первый.</p>
+  {% endif %}
+
+  <form method="post" class="border-t pt-4 grid grid-cols-1 md:grid-cols-5 gap-2 items-end">
+    <input type="hidden" name="action" value="add_rank">
+    <div>
+      <label class="text-sm text-slate-600 block mb-1">Ранг</label>
+      <input name="rank" required placeholder="Diamond 1"
+             class="border rounded px-3 py-2 w-full">
+    </div>
+    <div>
+      <label class="text-sm text-slate-600 block mb-1">3ч ₽</label>
+      <input name="price_3h" type="number" required min="1" step="1"
+             class="border rounded px-3 py-2 w-full font-mono">
+    </div>
+    <div>
+      <label class="text-sm text-slate-600 block mb-1">6ч ₽</label>
+      <input name="price_6h" type="number" required min="1" step="1"
+             class="border rounded px-3 py-2 w-full font-mono">
+    </div>
+    <div>
+      <label class="text-sm text-slate-600 block mb-1">12ч ₽</label>
+      <input name="price_12h" type="number" required min="1" step="1"
+             class="border rounded px-3 py-2 w-full font-mono">
+    </div>
+    <button class="bg-emerald-600 text-white px-4 py-2 rounded hover:bg-emerald-700">
+      + Добавить
+    </button>
+  </form>
+  <p class="text-xs text-slate-500 mt-3">
+    Если ранг с таким названием уже есть — обновятся его цены.
+  </p>
+</div>
+{% endblock %}
