@@ -9,11 +9,14 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from aiogram.types import BufferedInputFile
 
 from config import WEB_ADMIN_PASSWORD, WEB_SECRET_KEY, ADMIN_IDS
-from database.models import Account, RentalHistory
+from database.models import (
+    Account, RentalHistory, RankSetting,
+)
 from database.session import async_session
+from services.settings_service import get_setting, set_setting
+from services.valorant_service import get_recent_matches
 from web import notifications
 from web.photo_proxy import register_photo_route
-from services.valorant_service import get_recent_matches
 
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -196,7 +199,6 @@ async def account_detail(request: web.Request):
             .limit(20)
         )).scalars().all()
 
-    # Запрашиваем последние матчи
     recent_matches = await get_recent_matches(account.riot_id) if account.riot_id else []
 
     html = env.get_template("account_detail.html").render(
@@ -338,6 +340,7 @@ async def mark_password_changed(request: web.Request):
             acc.rented_until = None
             acc.reserved_at = None
             acc.payment_invoice_id = None
+            acc.password_changed_at = datetime.utcnow()
             await session.commit()
             notifications.push("Пароль сменён", f"#{acc_id} — снова свободен", level="success")
     raise web.HTTPFound("/password-change")
@@ -377,6 +380,96 @@ async def notifications_page(request: web.Request):
     return web.Response(text=html, content_type="text/html")
 
 
+# ─── Настройки ───
+
+async def settings_page(request: web.Request):
+    error = None
+    success = None
+
+    async with async_session() as session:
+        if request.method == "POST":
+            post = await request.post()
+            action = post.get("action")
+
+            if action == "save_commission":
+                try:
+                    commission = float(post.get("commission", "10"))
+                    if commission < 0 or commission > 100:
+                        raise ValueError("должно быть 0–100")
+                    await set_setting(session, "partner_commission", str(commission))
+                    success = f"Комиссия обновлена: {commission}%"
+                except (ValueError, KeyError) as e:
+                    error = f"Неверная комиссия: {e}"
+
+            elif action == "add_rank":
+                try:
+                    rank_name = post["rank"].strip()
+                    if not rank_name:
+                        raise ValueError("название ранга обязательно")
+
+                    p3 = float(post["price_3h"])
+                    p6 = float(post["price_6h"])
+                    p12 = float(post["price_12h"])
+
+                    if p3 <= 0 or p6 <= 0 or p12 <= 0:
+                        raise ValueError("все цены должны быть больше 0")
+                    if p6 < p3 or p12 < p6:
+                        raise ValueError("цены должны расти: 3ч ≤ 6ч ≤ 12ч")
+
+                    existing = (await session.execute(
+                        select(RankSetting).where(RankSetting.rank == rank_name)
+                    )).scalar_one_or_none()
+
+                    if existing:
+                        existing.min_price_3h = p3
+                        existing.min_price_6h = p6
+                        existing.min_price_12h = p12
+                        success = f"Ранг {rank_name} обновлён"
+                    else:
+                        session.add(RankSetting(
+                            rank=rank_name,
+                            min_price_3h=p3, min_price_6h=p6, min_price_12h=p12,
+                        ))
+                        success = f"Ранг {rank_name} добавлен"
+
+                    await session.commit()
+                except (ValueError, KeyError) as e:
+                    error = f"Ошибка: {e}"
+
+            elif action == "delete_rank":
+                try:
+                    rank_id = int(post["rank_id"])
+                    rank_row = await session.get(RankSetting, rank_id)
+                    if rank_row:
+                        name = rank_row.rank
+                        await session.delete(rank_row)
+                        await session.commit()
+                        success = f"Ранг {name} удалён"
+                except (ValueError, KeyError) as e:
+                    error = f"Ошибка удаления: {e}"
+
+        # Загрузка данных для отображения
+        commission_str = await get_setting(session, "partner_commission", "10")
+        try:
+            commission_float = float(commission_str)
+        except (TypeError, ValueError):
+            commission_float = 10.0
+        partner_share = 100.0 - commission_float
+
+        ranks = (await session.execute(
+            select(RankSetting).order_by(RankSetting.rank)
+        )).scalars().all()
+
+    html = env.get_template("settings.html").render(
+        commission=commission_float,
+        partner_share=round(partner_share, 1),
+        ranks=ranks,
+        error=error,
+        success=success,
+    )
+    return web.Response(text=html, content_type="text/html")
+
+
 # ─── Создание приложения ───
 
 def create_web_app(bot):
@@ -405,6 +498,10 @@ def create_web_app(bot):
     app.router.add_get("/export", export_page)
     app.router.add_get("/api/notifications", notifications_api)
     app.router.add_get("/notifications", notifications_page)
+
+    # Настройки
+    app.router.add_get("/settings", settings_page)
+    app.router.add_post("/settings", settings_page)
 
     register_photo_route(app, bot)
     return app
