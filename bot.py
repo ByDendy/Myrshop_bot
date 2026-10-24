@@ -8,7 +8,7 @@ from config import BOT_TOKEN, FUNPAY_AUTO_LOTS_ENABLED, WEB_PORT, WEB_ADMIN_PASS
 from database.session import init_db, async_session
 from services.funpay_service import FunPayService
 from services.cryptobot_service import CryptoBotService
-from handlers import start, buyer, admin
+from handlers import start, buyer, admin, partner
 from handlers.rental_checker import rental_checker_loop
 from handlers.payment_checker import payment_checker_loop
 from handlers.reservation_checker import reservation_checker_loop
@@ -47,13 +47,14 @@ async def main():
     dp.include_router(start.router)
     dp.include_router(buyer.router)
     dp.include_router(admin.router)
+    dp.include_router(partner.router)
 
     await init_db()
 
     asyncio.create_task(rental_checker_loop(bot))
     asyncio.create_task(payment_checker_loop(bot))
     asyncio.create_task(reservation_checker_loop(cryptobot))
-    asyncio.create_task(funpay_watcher_loop(bot, funpay))
+    # asyncio.create_task(funpay_watcher_loop(bot, funpay))  # отключён из-за бана FunPay
 
     if FUNPAY_AUTO_LOTS_ENABLED:
         asyncio.create_task(lot_manager_loop(funpay))
