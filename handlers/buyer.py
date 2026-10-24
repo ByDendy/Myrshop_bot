@@ -11,7 +11,8 @@ from services.funpay_service import FunPayService
 from services.cryptobot_service import CryptoBotService
 from services.settings_service import get_setting
 from services.notifications import notify_admin
-from services.partner_service import on_rental_started # <--- ДОБАВЛЕНО
+from services.partner_service import on_rental_started
+from services.avatar_service import refresh_avatar
 from web import notifications
 from config import SUPPORT_USERNAME
 
@@ -157,7 +158,6 @@ async def handle_payment(
         await callback.answer("Этот аккаунт уже занят!", show_alert=True)
         return
 
-    # ─── Проверка бана ───
     cust = await session.get(Customer, callback.from_user.id)
     if cust and cust.is_banned:
         await callback.answer(
@@ -167,7 +167,6 @@ async def handle_payment(
         )
         return
 
-    # ─── Регистрация/обновление покупателя ───
     if not cust:
         cust = Customer(
             telegram_id=callback.from_user.id,
@@ -180,6 +179,9 @@ async def handle_payment(
             cust.username = callback.from_user.username
         if callback.from_user.first_name:
             cust.first_name = callback.from_user.first_name
+
+    if await refresh_avatar(callback.bot, cust):
+        pass
     await session.commit()
 
     method = (await session.execute(
@@ -212,10 +214,9 @@ async def handle_payment(
             started_at=datetime.utcnow(),
         )
         session.add(rental)
-        await session.flush() # Получаем rental.id до коммита
+        await session.flush()
         await session.commit()
 
-        # НАЧИСЛЯЕМ ПАРТНЁРУ
         if account.partner_id:
             await on_rental_started(session, account, rental.id, price)
 
