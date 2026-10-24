@@ -7,6 +7,7 @@ from database.models import Account, RentalHistory
 from database.session import async_session
 from services.cryptobot_service import CryptoBotService
 from services.notifications import notify_admin
+from services.partner_service import on_rental_started
 from web import notifications
 
 
@@ -72,21 +73,27 @@ async def _deliver_account(bot, session, acc: Account):
     acc.payment_invoice_id = None
     acc.reserved_at = None
 
-    session.add(RentalHistory(
+    rental = RentalHistory(
         account_id=acc.id,
         buyer_id=acc.buyer_id,
         method="cryptobot",
         amount=price,
         hours=hours,
         started_at=datetime.utcnow(),
-    ))
-
+    )
+    session.add(rental)
+    await session.flush()  # получаем rental.id
     await session.commit()
+
+    # Начисляем партнёру (если аккаунт партнёрский)
+    if acc.partner_id:
+        await on_rental_started(session, acc, rental.id, price)
 
     notifications.push(
         "Новая аренда (CryptoBot)",
         f"#{acc.id} · {acc.rank} · {hours}ч · {price:.0f} ₽",
         level="success",
+        category="partner" if acc.partner_id else "general",
     )
 
     text = (
