@@ -30,6 +30,10 @@ env = Environment(
     loader=FileSystemLoader(str(TEMPLATES_DIR)),
     autoescape=select_autoescape(["html"]),
 )
+
+# Регистрируем фильтр from_json для шаблона settings.html
+env.filters["from_json"] = lambda s: json.loads(s) if s else {}
+
 serializer = URLSafeTimedSerializer(WEB_SECRET_KEY, salt="web-session")
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 SESSION_MAX_AGE = 60 * 60 * 24 * 7
@@ -128,7 +132,6 @@ async def login_page(request: web.Request):
 
 
 async def partner_auth(request: web.Request):
-    """Магическая ссылка для входа партнёра"""
     token = request.query.get("token")
     if not token:
         raise web.HTTPForbidden(text="Токен не передан")
@@ -140,10 +143,6 @@ async def partner_auth(request: web.Request):
     except BadSignature:
         raise web.HTTPForbidden(text="Неверная ссылка.")
 
-    if data.get("type") != "partner":
-        raise web.HTTPForbidden()
-
-    # Успех - выдаем куки
     new_token = serializer.dumps({"type": "partner", "id": data["id"]})
     resp = web.HTTPFound("/partner-portal")
     resp.set_cookie("session", new_token, max_age=SESSION_MAX_AGE, httponly=True)
@@ -160,18 +159,13 @@ async def logout(request: web.Request):
 
 async def partner_portal(request: web.Request):
     partner_id = request["user"]["partner_id"]
-    
     async with async_session() as session:
         partner = await session.get(Partner, partner_id)
         accounts = (await session.execute(select(Account).where(Account.partner_id == partner_id))).scalars().all()
         payouts = (await session.execute(select(PartnerPayout).where(PartnerPayout.partner_id == partner_id).order_by(desc(PartnerPayout.requested_at)).limit(10))).scalars().all()
-        
-        # Простая статистика
         rentals = (await session.execute(select(func.count(RentalHistory.id)).join(Account).where(Account.partner_id == partner_id))).scalar() or 0
 
-    html = env.get_template("partner_portal.html").render(
-        p=partner, accounts=accounts, payouts=payouts, rentals=rentals
-    )
+    html = env.get_template("partner_portal.html").render(p=partner, accounts=accounts, payouts=payouts, rentals=rentals)
     return web.Response(text=html, content_type="text/html")
 
 
@@ -217,41 +211,24 @@ def _maybe_photo_field(post):
 
 async def dashboard(request: web.Request):
     async with async_session() as session:
-        accounts_total = (await session.execute(
-            select(func.count(Account.id))
-        )).scalar() or 0
-        active = (await session.execute(
-            select(func.count(Account.id)).where(Account.status == "rented")
-        )).scalar() or 0
-        awaiting = (await session.execute(
-            select(func.count(Account.id)).where(Account.status == "awaiting_password_change")
-        )).scalar() or 0
-        total_rentals = (await session.execute(
-            select(func.count(RentalHistory.id))
-        )).scalar() or 0
-        total_hours = (await session.execute(
-            select(func.coalesce(func.sum(RentalHistory.hours), 0))
-        )).scalar() or 0
-        total_revenue = (await session.execute(
-            select(func.coalesce(func.sum(RentalHistory.amount), 0))
-        )).scalar() or 0
-        recent = (await session.execute(
-            select(RentalHistory).order_by(desc(RentalHistory.started_at)).limit(10)
-        )).scalars().all()
+        accounts_total = (await session.execute(select(func.count(Account.id)))).scalar() or 0
+        active = (await session.execute(select(func.count(Account.id)).where(Account.status == "rented"))).scalar() or 0
+        awaiting = (await session.execute(select(func.count(Account.id)).where(Account.status == "awaiting_password_change"))).scalar() or 0
+        total_rentals = (await session.execute(select(func.count(RentalHistory.id)))).scalar() or 0
+        total_hours = (await session.execute(select(func.coalesce(func.sum(RentalHistory.hours), 0)))).scalar() or 0
+        total_revenue = (await session.execute(select(func.coalesce(func.sum(RentalHistory.amount), 0)))).scalar() or 0
+        recent = (await session.execute(select(RentalHistory).order_by(desc(RentalHistory.started_at)).limit(10))).scalars().all()
 
         acc_map = {}
         if recent:
             ids = [r.account_id for r in recent]
-            accs = (await session.execute(
-                select(Account).where(Account.id.in_(ids))
-            )).scalars().all()
+            accs = (await session.execute(select(Account).where(Account.id.in_(ids)))).scalars().all()
             acc_map = {a.id: a for a in accs}
 
     html = env.get_template("dashboard.html").render(
         accounts_total=accounts_total, active=active, awaiting=awaiting,
         total_rentals=total_rentals, total_hours=total_hours,
-        total_revenue=round(total_revenue, 2),
-        recent=recent, acc_map=acc_map,
+        total_revenue=round(total_revenue, 2), recent=recent, acc_map=acc_map,
         user=request.get("user")
     )
     return web.Response(text=html, content_type="text/html")
@@ -265,22 +242,16 @@ async def accounts_list(request: web.Request):
 
     async with async_session() as session:
         q = select(Account).order_by(Account.rank, Account.id)
-        if rank:
-            q = q.where(Account.rank == rank)
-        if owner_filter == "me":
-            q = q.where(Account.partner_id.is_(None))
-        elif owner_filter == "partner":
-            q = q.where(Account.partner_id.isnot(None))
+        if rank: q = q.where(Account.rank == rank)
+        if owner_filter == "me": q = q.where(Account.partner_id.is_(None))
+        elif owner_filter == "partner": q = q.where(Account.partner_id.isnot(None))
 
         accounts = (await session.execute(q)).scalars().all()
-        ranks = (await session.execute(
-            select(Account.rank).distinct().order_by(Account.rank)
-        )).scalars().all()
+        ranks = (await session.execute(select(Account.rank).distinct().order_by(Account.rank))).scalars().all()
 
     html = env.get_template("accounts.html").render(
         accounts=accounts, ranks=ranks, current_rank=rank,
-        owner_filter=owner_filter, timedelta=timedelta,
-        user=request.get("user")
+        owner_filter=owner_filter, timedelta=timedelta, user=request.get("user")
     )
     return web.Response(text=html, content_type="text/html")
 
@@ -289,40 +260,24 @@ async def account_detail(request: web.Request):
     acc_id = int(request.match_info["id"])
     period = request.query.get("period", "all")
     now = datetime.utcnow()
-    since = {"7d": now - timedelta(days=7), "30d": now - timedelta(days=30)}.get(
-        period, datetime(1970, 1, 1)
-    )
+    since = {"7d": now - timedelta(days=7), "30d": now - timedelta(days=30)}.get(period, datetime(1970, 1, 1))
 
     async with async_session() as session:
         account = await session.get(Account, acc_id)
-        if not account:
-            raise web.HTTPNotFound()
+        if not account: raise web.HTTPNotFound()
 
         stats = (await session.execute(
-            select(
-                func.count(RentalHistory.id),
-                func.coalesce(func.sum(RentalHistory.hours), 0),
-                func.coalesce(func.sum(RentalHistory.amount), 0),
-            ).where(
-                RentalHistory.account_id == acc_id,
-                RentalHistory.started_at >= since,
-            )
+            select(func.count(RentalHistory.id), func.coalesce(func.sum(RentalHistory.hours), 0), func.coalesce(func.sum(RentalHistory.amount), 0))
+            .where(RentalHistory.account_id == acc_id, RentalHistory.started_at >= since)
         )).first()
 
-        history = (await session.execute(
-            select(RentalHistory)
-            .where(RentalHistory.account_id == acc_id)
-            .order_by(desc(RentalHistory.started_at))
-            .limit(20)
-        )).scalars().all()
+        history = (await session.execute(select(RentalHistory).where(RentalHistory.account_id == acc_id).order_by(desc(RentalHistory.started_at)).limit(20))).scalars().all()
 
     recent_matches = await get_recent_matches(account.riot_id) if account.riot_id else []
 
     html = env.get_template("account_detail.html").render(
-        a=account, period=period,
-        rentals=stats[0], hours=stats[1], revenue=round(stats[2], 2),
-        history=history, recent_matches=recent_matches,
-        user=request.get("user")
+        a=account, period=period, rentals=stats[0], hours=stats[1], revenue=round(stats[2], 2),
+        history=history, recent_matches=recent_matches, user=request.get("user")
     )
     return web.Response(text=html, content_type="text/html")
 
@@ -336,25 +291,16 @@ async def account_add_page(request: web.Request):
         photo_id = None
         pf = _maybe_photo_field(post)
         if pf:
-            try:
-                photo_id = await _upload_photo_to_telegram(bot, pf.file.read(), pf.filename)
-            except Exception as e:
-                logging.warning(f"photo add: {e}")
+            try: photo_id = await _upload_photo_to_telegram(bot, pf.file.read(), pf.filename)
+            except Exception as e: logging.warning(f"photo add: {e}")
 
         try:
             acc = Account(
-                login=post["login"].strip(),
-                password=post["password"].strip(),
-                email=(post.get("email") or "").strip() or None,
-                email_password=(post.get("email_password") or "").strip() or None,
-                riot_id=(post.get("riot_id") or "").strip() or None,
-                rank=post["rank"].strip(),
-                tier=post.get("tier", "standard"),
-                price_3h=float(post["price_3h"]),
-                price_6h=float(post["price_6h"]),
-                price_12h=float(post["price_12h"]),
-                photo_id=photo_id,
-                status="free",
+                login=post["login"].strip(), password=post["password"].strip(),
+                email=(post.get("email") or "").strip() or None, email_password=(post.get("email_password") or "").strip() or None,
+                riot_id=(post.get("riot_id") or "").strip() or None, rank=post["rank"].strip(), tier=post.get("tier", "standard"),
+                price_3h=float(post["price_3h"]), price_6h=float(post["price_6h"]), price_12h=float(post["price_12h"]),
+                photo_id=photo_id, status="free",
             )
         except (KeyError, ValueError) as e:
             error = f"Ошибка: {e}"
@@ -377,23 +323,18 @@ async def account_edit_page(request: web.Request):
 
     async with async_session() as session:
         account = await session.get(Account, acc_id)
-        if not account:
-            raise web.HTTPNotFound()
+        if not account: raise web.HTTPNotFound()
 
         if request.method == "POST":
             post = await request.post()
-
-            if post.get("remove_photo"):
-                account.photo_id = None
+            if post.get("remove_photo"): account.photo_id = None
             else:
                 pf = _maybe_photo_field(post)
                 if pf:
                     try:
                         new_id = await _upload_photo_to_telegram(bot, pf.file.read(), pf.filename)
-                        if new_id:
-                            account.photo_id = new_id
-                    except Exception as e:
-                        logging.warning(f"photo edit: {e}")
+                        if new_id: account.photo_id = new_id
+                    except Exception as e: logging.warning(f"photo edit: {e}")
 
             try:
                 account.login = post["login"].strip()
@@ -430,19 +371,13 @@ async def account_delete(request: web.Request):
 
 async def awaiting_list(request: web.Request):
     async with async_session() as session:
-        all_accounts = (await session.execute(
-            select(Account).where(
-                Account.status.in_(["awaiting_password_change", "awaiting_review"])
-            )
-        )).scalars().all()
+        all_accounts = (await session.execute(select(Account).where(Account.status.in_(["awaiting_password_change", "awaiting_review"])))).scalars().all()
 
     my_accounts = [a for a in all_accounts if not a.partner_id]
     partner_accounts = [a for a in all_accounts if a.partner_id]
 
     html = env.get_template("password_change.html").render(
-        my_accounts=my_accounts,
-        partner_accounts=partner_accounts,
-        user=request.get("user")
+        my_accounts=my_accounts, partner_accounts=partner_accounts, user=request.get("user")
     )
     return web.Response(text=html, content_type="text/html")
 
@@ -454,8 +389,7 @@ async def mark_password_changed(request: web.Request):
     async with async_session() as session:
         acc = await session.get(Account, acc_id)
         if acc:
-            if new_password:
-                acc.password = new_password
+            if new_password: acc.password = new_password
             acc.status = "free"
             acc.buyer_id = None
             acc.rental_hours = None
@@ -472,40 +406,23 @@ async def mark_password_changed(request: web.Request):
 
 async def customers_list(request: web.Request):
     async with async_session() as session:
-        buyer_ids = (await session.execute(
-            select(RentalHistory.buyer_id).distinct()
-            .where(RentalHistory.buyer_id.isnot(None))
-        )).scalars().all()
+        buyer_ids = (await session.execute(select(RentalHistory.buyer_id).distinct().where(RentalHistory.buyer_id.isnot(None)))).scalars().all()
 
         if buyer_ids:
-            existing = (await session.execute(
-                select(Customer.telegram_id).where(Customer.telegram_id.in_(buyer_ids))
-            )).scalars().all()
+            existing = (await session.execute(select(Customer.telegram_id).where(Customer.telegram_id.in_(buyer_ids)))).scalars().all()
             existing_set = set(existing)
             for bid in buyer_ids:
-                if bid not in existing_set:
-                    session.add(Customer(telegram_id=bid, is_banned=False))
-            if len(existing_set) < len(buyer_ids):
-                await session.commit()
+                if bid not in existing_set: session.add(Customer(telegram_id=bid, is_banned=False))
+            if len(existing_set) < len(buyer_ids): await session.commit()
 
-        custs = (await session.execute(
-            select(Customer).order_by(Customer.created_at.desc())
-        )).scalars().all()
+        custs = (await session.execute(select(Customer).order_by(Customer.created_at.desc()))).scalars().all()
 
         stats_rows = (await session.execute(
-            select(
-                RentalHistory.buyer_id,
-                func.coalesce(func.sum(RentalHistory.amount), 0),
-                func.coalesce(func.sum(RentalHistory.hours), 0),
-                func.count(RentalHistory.id),
-            ).where(RentalHistory.buyer_id.isnot(None))
-            .group_by(RentalHistory.buyer_id)
+            select(RentalHistory.buyer_id, func.coalesce(func.sum(RentalHistory.amount), 0), func.coalesce(func.sum(RentalHistory.hours), 0), func.count(RentalHistory.id))
+            .where(RentalHistory.buyer_id.isnot(None)).group_by(RentalHistory.buyer_id)
         )).all()
 
-        stats = {
-            r[0]: {"spent": round(r[1] or 0, 2), "hours": int(r[2] or 0), "count": int(r[3] or 0)}
-            for r in stats_rows
-        }
+        stats = {r[0]: {"spent": round(r[1] or 0, 2), "hours": int(r[2] or 0), "count": int(r[3] or 0)} for r in stats_rows}
 
         result = []
         for c in custs:
@@ -519,36 +436,26 @@ async def customers_list(request: web.Request):
 
 async def customer_detail(request: web.Request):
     customer_id = int(request.match_info["id"])
-
     async with async_session() as session:
         customer = await session.get(Customer, customer_id)
-        if not customer:
-            raise web.HTTPNotFound()
+        if not customer: raise web.HTTPNotFound()
 
         stats = (await session.execute(
-            select(
-                func.coalesce(func.sum(RentalHistory.amount), 0),
-                func.coalesce(func.sum(RentalHistory.hours), 0),
-                func.count(RentalHistory.id),
-            ).where(RentalHistory.buyer_id == customer_id)
+            select(func.coalesce(func.sum(RentalHistory.amount), 0), func.coalesce(func.sum(RentalHistory.hours), 0), func.count(RentalHistory.id))
+            .where(RentalHistory.buyer_id == customer_id)
         )).first()
 
         fav = (await session.execute(
             select(Account.rank, func.count(RentalHistory.id).label("cnt"))
             .join(Account, Account.id == RentalHistory.account_id)
-            .where(RentalHistory.buyer_id == customer_id)
-            .group_by(Account.rank)
-            .order_by(func.count(RentalHistory.id).desc())
-            .limit(1)
+            .where(RentalHistory.buyer_id == customer_id).group_by(Account.rank)
+            .order_by(func.count(RentalHistory.id).desc()).limit(1)
         )).first()
 
         since_30 = datetime.utcnow() - timedelta(days=30)
         activity = (await session.execute(
             select(func.date(RentalHistory.started_at), func.count(RentalHistory.id))
-            .where(
-                RentalHistory.buyer_id == customer_id,
-                RentalHistory.started_at >= since_30,
-            )
+            .where(RentalHistory.buyer_id == customer_id, RentalHistory.started_at >= since_30)
             .group_by(func.date(RentalHistory.started_at))
         )).all()
 
@@ -559,29 +466,19 @@ async def customer_detail(request: web.Request):
 
         days = []
         start_date = (datetime.utcnow() - timedelta(days=29)).date()
-        for _ in range(start_date.weekday()):
-            days.append({"date": "", "count": -1})
+        for _ in range(start_date.weekday()): days.append({"date": "", "count": -1})
         for i in range(29, -1, -1):
             day = (datetime.utcnow() - timedelta(days=i)).date()
             days.append({"date": day.strftime('%d.%m.%Y'), "count": activity_map.get(day.isoformat(), 0)})
 
         history = (await session.execute(
-            select(RentalHistory, Account.rank)
-            .join(Account, Account.id == RentalHistory.account_id)
-            .where(RentalHistory.buyer_id == customer_id)
-            .order_by(desc(RentalHistory.started_at))
-            .limit(50)
+            select(RentalHistory, Account.rank).join(Account, Account.id == RentalHistory.account_id)
+            .where(RentalHistory.buyer_id == customer_id).order_by(desc(RentalHistory.started_at)).limit(50)
         )).all()
 
     html = env.get_template("customer_detail.html").render(
-        c=customer,
-        total_spent=round(stats[0] or 0, 2),
-        total_hours=int(stats[1] or 0),
-        total_rentals=int(stats[2] or 0),
-        favorite_rank=fav[0] if fav else "—",
-        activity_days=days,
-        history=history,
-        user=request.get("user")
+        c=customer, total_spent=round(stats[0] or 0, 2), total_hours=int(stats[1] or 0), total_rentals=int(stats[2] or 0),
+        favorite_rank=fav[0] if fav else "—", activity_days=days, history=history, user=request.get("user")
     )
     return web.Response(text=html, content_type="text/html")
 
@@ -590,7 +487,6 @@ async def customer_ban(request: web.Request):
     customer_id = int(request.match_info["id"])
     data = await request.post()
     reason = (data.get("reason") or "").strip() or "Не указана"
-
     async with async_session() as session:
         customer = await session.get(Customer, customer_id)
         if customer:
@@ -598,11 +494,7 @@ async def customer_ban(request: web.Request):
             customer.ban_reason = reason
             customer.banned_at = datetime.utcnow()
             await session.commit()
-            notifications.push(
-                "🚫 Покупатель забанен",
-                f"ID {customer_id} · причина: {reason}",
-                level="warning",
-            )
+            notifications.push("🚫 Покупатель забанен", f"ID {customer_id} · причина: {reason}", level="warning")
     raise web.HTTPFound(f"/customers/{customer_id}")
 
 
@@ -624,18 +516,9 @@ async def customer_unban(request: web.Request):
 async def export_page(request: web.Request):
     if request.query.get("download") == "1":
         async with async_session() as session:
-            accounts = (await session.execute(
-                select(Account).order_by(Account.id)
-            )).scalars().all()
-        lines = [
-            f"{a.login};;{a.password};;{a.rank};;"
-            f"{a.price_3h:g},{a.price_6h:g},{a.price_12h:g}"
-            for a in accounts
-        ]
-        return web.Response(
-            body="\n".join(lines), content_type="text/plain",
-            headers={"Content-Disposition": 'attachment; filename="accounts.txt"'},
-        )
+            accounts = (await session.execute(select(Account).order_by(Account.id))).scalars().all()
+        lines = [f"{a.login};;{a.password};;{a.rank};;{a.price_3h:g},{a.price_6h:g},{a.price_12h:g}" for a in accounts]
+        return web.Response(body="\n".join(lines), content_type="text/plain", headers={"Content-Disposition": 'attachment; filename="accounts.txt"'})
     html = env.get_template("export.html").render(user=request.get("user"))
     return web.Response(text=html, content_type="text/html")
 
@@ -668,44 +551,28 @@ async def settings_page(request: web.Request):
             if action == "save_commission":
                 try:
                     commission = float(post.get("commission", "10"))
-                    if commission < 0 or commission > 100:
-                        raise ValueError("должно быть 0–100")
+                    if commission < 0 or commission > 100: raise ValueError("должно быть 0–100")
                     await set_setting(session, "partner_commission", str(commission))
                     success = f"Комиссия обновлена: {commission}%"
-                except (ValueError, KeyError) as e:
-                    error = f"Неверная комиссия: {e}"
+                except (ValueError, KeyError) as e: error = f"Неверная комиссия: {e}"
 
             elif action == "add_rank":
                 try:
                     rank_name = post["rank"].strip()
-                    if not rank_name:
-                        raise ValueError("название ранга обязательно")
-                    p3 = float(post["price_3h"])
-                    p6 = float(post["price_6h"])
-                    p12 = float(post["price_12h"])
-                    if p3 <= 0 or p6 <= 0 or p12 <= 0:
-                        raise ValueError("все цены должны быть больше 0")
-                    if p6 < p3 or p12 < p6:
-                        raise ValueError("цены должны расти: 3ч ≤ 6ч ≤ 12ч")
+                    if not rank_name: raise ValueError("название ранга обязательно")
+                    p3 = float(post["price_3h"]); p6 = float(post["price_6h"]); p12 = float(post["price_12h"])
+                    if p3 <= 0 or p6 <= 0 or p12 <= 0: raise ValueError("все цены должны быть больше 0")
+                    if p6 < p3 or p12 < p6: raise ValueError("цены должны расти: 3ч ≤ 6ч ≤ 12ч")
 
-                    existing = (await session.execute(
-                        select(RankSetting).where(RankSetting.rank == rank_name)
-                    )).scalar_one_or_none()
-
+                    existing = (await session.execute(select(RankSetting).where(RankSetting.rank == rank_name))).scalar_one_or_none()
                     if existing:
-                        existing.min_price_3h = p3
-                        existing.min_price_6h = p6
-                        existing.min_price_12h = p12
+                        existing.min_price_3h = p3; existing.min_price_6h = p6; existing.min_price_12h = p12
                         success = f"Ранг {rank_name} обновлён"
                     else:
-                        session.add(RankSetting(
-                            rank=rank_name,
-                            min_price_3h=p3, min_price_6h=p6, min_price_12h=p12,
-                        ))
+                        session.add(RankSetting(rank=rank_name, min_price_3h=p3, min_price_6h=p6, min_price_12h=p12))
                         success = f"Ранг {rank_name} добавлен"
                     await session.commit()
-                except (ValueError, KeyError) as e:
-                    error = f"Ошибка: {e}"
+                except (ValueError, KeyError) as e: error = f"Ошибка: {e}"
 
             elif action == "delete_rank":
                 try:
@@ -716,8 +583,7 @@ async def settings_page(request: web.Request):
                         await session.delete(rank_row)
                         await session.commit()
                         success = f"Ранг {name} удалён"
-                except (ValueError, KeyError) as e:
-                    error = f"Ошибка удаления: {e}"
+                except (ValueError, KeyError) as e: error = f"Ошибка удаления: {e}"
 
             elif action == "add_manager":
                 try:
@@ -745,22 +611,15 @@ async def settings_page(request: web.Request):
                 except (ValueError, KeyError) as e: error = f"Ошибка: {e}"
 
         commission_str = await get_setting(session, "partner_commission", "10")
-        try:
-            commission_float = float(commission_str)
-        except (TypeError, ValueError):
-            commission_float = 10.0
+        try: commission_float = float(commission_str)
+        except (TypeError, ValueError): commission_float = 10.0
         partner_share = 100.0 - commission_float
 
-        ranks = (await session.execute(
-            select(RankSetting).order_by(RankSetting.rank)
-        )).scalars().all()
-        managers = (await session.execute(
-            select(Manager).order_by(Manager.id)
-        )).scalars().all()
+        ranks = (await session.execute(select(RankSetting).order_by(RankSetting.rank))).scalars().all()
+        managers = (await session.execute(select(Manager).order_by(Manager.id))).scalars().all()
 
     html = env.get_template("settings.html").render(
-        commission=commission_float,
-        partner_share=round(partner_share, 1),
+        commission=commission_float, partner_share=round(partner_share, 1),
         ranks=ranks, managers=managers, error=error, success=success,
         user=request.get("user")
     )
@@ -773,70 +632,27 @@ async def settings_page(request: web.Request):
 
 async def partners_dashboard(request: web.Request):
     async with async_session() as session:
-        partners_active = (await session.execute(
-            select(func.count(Partner.id)).where(Partner.status == "active")
-        )).scalar() or 0
-
-        accounts_total = (await session.execute(
-            select(func.count(Account.id)).where(Account.partner_id.isnot(None))
-        )).scalar() or 0
-
-        pending_moderation = (await session.execute(
-            select(func.count(Account.id)).where(
-                Account.status.in_(["pending_approval", "awaiting_approval"])
-            )
-        )).scalar() or 0
-
-        pending_payouts = (await session.execute(
-            select(func.count(PartnerPayout.id)).where(
-                PartnerPayout.status == "requested"
-            )
-        )).scalar() or 0
-
-        pending_payout_amount = (await session.execute(
-            select(func.coalesce(func.sum(PartnerPayout.amount), 0)).where(
-                PartnerPayout.status == "requested"
-            )
-        )).scalar() or 0
+        partners_active = (await session.execute(select(func.count(Partner.id)).where(Partner.status == "active"))).scalar() or 0
+        accounts_total = (await session.execute(select(func.count(Account.id)).where(Account.partner_id.isnot(None)))).scalar() or 0
+        pending_moderation = (await session.execute(select(func.count(Account.id)).where(Account.status.in_(["pending_approval", "awaiting_approval"])))).scalar() or 0
+        pending_payouts = (await session.execute(select(func.count(PartnerPayout.id)).where(PartnerPayout.status == "requested"))).scalar() or 0
+        pending_payout_amount = (await session.execute(select(func.coalesce(func.sum(PartnerPayout.amount), 0)).where(PartnerPayout.status == "requested"))).scalar() or 0
 
         cutoff = datetime.utcnow() - timedelta(days=30)
-        revenue_30d = (await session.execute(
-            select(func.coalesce(func.sum(PartnerEarning.amount), 0)).where(
-                PartnerEarning.created_at >= cutoff
-            )
-        )).scalar() or 0
+        revenue_30d = (await session.execute(select(func.coalesce(func.sum(PartnerEarning.amount), 0)).where(PartnerEarning.created_at >= cutoff))).scalar() or 0
 
-        total_balance = (await session.execute(
-            select(func.coalesce(func.sum(Partner.balance), 0))
-        )).scalar() or 0
-        total_frozen = (await session.execute(
-            select(func.coalesce(func.sum(Partner.frozen_balance), 0))
-        )).scalar() or 0
-        total_paid = (await session.execute(
-            select(func.coalesce(func.sum(Partner.total_paid), 0))
-        )).scalar() or 0
+        total_balance = (await session.execute(select(func.coalesce(func.sum(Partner.balance), 0)))).scalar() or 0
+        total_frozen = (await session.execute(select(func.coalesce(func.sum(Partner.frozen_balance), 0)))).scalar() or 0
+        total_paid = (await session.execute(select(func.coalesce(func.sum(Partner.total_paid), 0)))).scalar() or 0
 
         recent_events_raw = notifications.get_all(category="partner")[:10]
-        recent_events = [
-            {
-                "partner_id": 0, "partner_name": "—",
-                "event": e["title"] + (" — " + e["text"] if e["text"] else ""),
-                "ts": e["ts"],
-            }
-            for e in recent_events_raw
-        ]
+        recent_events = [{"partner_id": 0, "partner_name": "—", "event": e["title"] + (" — " + e["text"] if e["text"] else ""), "ts": e["ts"]} for e in recent_events_raw]
 
     html = env.get_template("partners_dashboard.html").render(
-        partners_active=partners_active,
-        accounts_total=accounts_total,
-        pending_moderation=pending_moderation,
-        pending_payouts=pending_payouts,
-        pending_payout_amount=round(pending_payout_amount),
-        revenue_30d=round(revenue_30d),
-        total_balance=round(total_balance),
-        total_frozen=round(total_frozen),
-        total_paid=round(total_paid),
-        recent_events=recent_events,
+        partners_active=partners_active, accounts_total=accounts_total, pending_moderation=pending_moderation,
+        pending_payouts=pending_payouts, pending_payout_amount=round(pending_payout_amount),
+        revenue_30d=round(revenue_30d), total_balance=round(total_balance),
+        total_frozen=round(total_frozen), total_paid=round(total_paid), recent_events=recent_events,
         user=request.get("user")
     )
     return web.Response(text=html, content_type="text/html")
@@ -848,36 +664,17 @@ async def partners_list(request: web.Request):
 
     async with async_session() as session:
         query = select(Partner)
-        if q:
-            query = query.where(or_(
-                Partner.full_name.ilike(f"%{q}%"),
-                Partner.username.ilike(f"%{q}%"),
-            ))
-        if status_filter:
-            query = query.where(Partner.status == status_filter)
+        if q: query = query.where(or_(Partner.full_name.ilike(f"%{q}%"), Partner.username.ilike(f"%{q}%")))
+        if status_filter: query = query.where(Partner.status == status_filter)
         query = query.order_by(Partner.id.desc())
 
         partners_raw = (await session.execute(query)).scalars().all()
-
         partners_data = []
         for p in partners_raw:
-            cnt = (await session.execute(
-                select(func.count(Account.id)).where(Account.partner_id == p.id)
-            )).scalar() or 0
-            partners_data.append({
-                "id": p.id,
-                "full_name": p.full_name,
-                "username": p.username,
-                "telegram_id": p.telegram_id,
-                "balance": round(p.balance or 0),
-                "total_earned": round(p.total_earned or 0),
-                "status": p.status,
-                "accounts_count": cnt,
-            })
+            cnt = (await session.execute(select(func.count(Account.id)).where(Account.partner_id == p.id))).scalar() or 0
+            partners_data.append({"id": p.id, "full_name": p.full_name, "username": p.username, "telegram_id": p.telegram_id, "balance": round(p.balance or 0), "total_earned": round(p.total_earned or 0), "status": p.status, "accounts_count": cnt})
 
-    html = env.get_template("partners_list.html").render(
-        partners=partners_data, q=q, status_filter=status_filter, user=request.get("user")
-    )
+    html = env.get_template("partners_list.html").render(partners=partners_data, q=q, status_filter=status_filter, user=request.get("user"))
     return web.Response(text=html, content_type="text/html")
 
 
@@ -885,40 +682,17 @@ async def partner_detail(request: web.Request):
     partner_id = int(request.match_info["id"])
     async with async_session() as session:
         partner = await session.get(Partner, partner_id)
-        if not partner:
-            raise web.HTTPNotFound()
+        if not partner: raise web.HTTPNotFound()
 
-        accounts = (await session.execute(
-            select(Account).where(Account.partner_id == partner_id).order_by(Account.id.desc())
-        )).scalars().all()
-
-        payouts = (await session.execute(
-            select(PartnerPayout)
-            .where(PartnerPayout.partner_id == partner_id)
-            .order_by(desc(PartnerPayout.requested_at))
-            .limit(20)
-        )).scalars().all()
-
-        earnings = (await session.execute(
-            select(PartnerEarning)
-            .where(PartnerEarning.partner_id == partner_id)
-            .order_by(desc(PartnerEarning.created_at))
-            .limit(30)
-        )).scalars().all()
-
+        accounts = (await session.execute(select(Account).where(Account.partner_id == partner_id).order_by(Account.id.desc()))).scalars().all()
+        payouts = (await session.execute(select(PartnerPayout).where(PartnerPayout.partner_id == partner_id).order_by(desc(PartnerPayout.requested_at)).limit(20))).scalars().all()
+        earnings = (await session.execute(select(PartnerEarning).where(PartnerEarning.partner_id == partner_id).order_by(desc(PartnerEarning.created_at)).limit(30))).scalars().all()
         acc_map = {a.id: a for a in accounts}
 
-        pending_request = (await session.execute(
-            select(PartnerPayout).where(
-                PartnerPayout.partner_id == partner_id,
-                PartnerPayout.status == "requested",
-            ).limit(1)
-        )).scalar_one_or_none()
+        pending_request = (await session.execute(select(PartnerPayout).where(PartnerPayout.partner_id == partner_id, PartnerPayout.status == "requested").limit(1))).scalar_one_or_none()
 
     html = env.get_template("partner_detail.html").render(
-        p=partner, accounts=accounts, payouts=payouts,
-        earnings=earnings, acc_map=acc_map,
-        pending_request=pending_request,
+        p=partner, accounts=accounts, payouts=payouts, earnings=earnings, acc_map=acc_map, pending_request=pending_request,
         user=request.get("user")
     )
     return web.Response(text=html, content_type="text/html")
@@ -947,51 +721,24 @@ async def partner_unblock(request: web.Request):
 async def partner_payout_direct(request: web.Request):
     partner_id = int(request.match_info["id"])
     bot = request.app["bot"]
-
     async with async_session() as session:
         p = await session.get(Partner, partner_id)
-        if not p:
-            raise web.HTTPFound(f"/partners/{partner_id}")
-
+        if not p: raise web.HTTPFound(f"/partners/{partner_id}")
         payout, error = await manual_payout(session, p)
-        if error:
-            raise web.HTTPFound(f"/partners/{partner_id}")
-
-        notifications.push(
-            "💸 Выплата партнёру",
-            f"{p.full_name} — {payout.amount:.0f} ₽",
-            level="success", category="partner",
-        )
-
-        await _notify_partner_tg(
-            bot, p,
-            f"💸 *Выплата выполнена*\n\n"
-            f"Сумма: *{payout.amount:.0f} ₽*\n\n"
-            f"Спасибо за работу! Продолжай в том же духе 🤝"
-        )
-
+        if error: raise web.HTTPFound(f"/partners/{partner_id}")
+        notifications.push("💸 Выплата партнёру", f"{p.full_name} — {payout.amount:.0f} ₽", level="success", category="partner")
+        await _notify_partner_tg(bot, p, f"💸 *Выплата выполнена*\n\nСумма: *{payout.amount:.0f} ₽*\n\nСпасибо за работу! Продолжай в том же духе 🤝")
     raise web.HTTPFound(f"/partners/{partner_id}")
 
 
 async def partners_approvals(request: web.Request):
     async with async_session() as session:
-        pending = (await session.execute(
-            select(Account).where(Account.status == "pending_approval").order_by(Account.created_at)
-        )).scalars().all()
-
+        pending = (await session.execute(select(Account).where(Account.status == "pending_approval").order_by(Account.created_at))).scalars().all()
         items = []
         for acc in pending:
             partner = await session.get(Partner, acc.partner_id) if acc.partner_id else None
-            rank_setting = (await session.execute(
-                select(RankSetting).where(RankSetting.rank == acc.rank)
-            )).scalar_one_or_none()
-            items.append({
-                "account": acc,
-                "partner": partner,
-                "min_3h": rank_setting.min_price_3h if rank_setting else 0,
-                "min_6h": rank_setting.min_price_6h if rank_setting else 0,
-                "min_12h": rank_setting.min_price_12h if rank_setting else 0,
-            })
+            rank_setting = (await session.execute(select(RankSetting).where(RankSetting.rank == acc.rank))).scalar_one_or_none()
+            items.append({"account": acc, "partner": partner, "min_3h": rank_setting.min_price_3h if rank_setting else 0, "min_6h": rank_setting.min_price_6h if rank_setting else 0, "min_12h": rank_setting.min_price_12h if rank_setting else 0})
 
     html = env.get_template("partners_approvals.html").render(accounts=items, user=request.get("user"))
     return web.Response(text=html, content_type="text/html")
@@ -1000,29 +747,16 @@ async def partners_approvals(request: web.Request):
 async def partner_approve(request: web.Request):
     acc_id = int(request.match_info["id"])
     bot = request.app["bot"]
-
     async with async_session() as session:
         acc = await session.get(Account, acc_id)
         if acc and acc.status == "pending_approval":
             acc.status = "free"
             acc.approved_at = datetime.utcnow()
             await session.commit()
-
-            notifications.push(
-                "✅ Аккаунт одобрен",
-                f"#{acc.id} · {acc.rank}",
-                level="success", category="partner",
-            )
-
+            notifications.push("✅ Аккаунт одобрен", f"#{acc.id} · {acc.rank}", level="success", category="partner")
             if acc.partner_id:
                 partner = await session.get(Partner, acc.partner_id)
-                await _notify_partner_tg(
-                    bot, partner,
-                    f"✅ *Твой аккаунт одобрен!*\n\n"
-                    f"Аккаунт #{acc.id} · {acc.rank}\n"
-                    f"Теперь он в магазине и доступен для аренды."
-                )
-
+                await _notify_partner_tg(bot, partner, f"✅ *Твой аккаунт одобрен!*\n\nАккаунт #{acc.id} · {acc.rank}\nТеперь он в магазине и доступен для аренды.")
     raise web.HTTPFound("/partners/approvals")
 
 
@@ -1031,39 +765,22 @@ async def partner_reject(request: web.Request):
     data = await request.post()
     reason = (data.get("reason") or "Причина не указана").strip()
     bot = request.app["bot"]
-
     async with async_session() as session:
         acc = await session.get(Account, acc_id)
         if acc and acc.status == "pending_approval":
             acc.status = "rejected"
             acc.reject_reason = reason
             await session.commit()
-
-            notifications.push(
-                "❌ Аккаунт отклонён",
-                f"#{acc.id} · {acc.rank} — {reason}",
-                level="danger", category="partner",
-            )
-
+            notifications.push("❌ Аккаунт отклонён", f"#{acc.id} · {acc.rank} — {reason}", level="danger", category="partner")
             if acc.partner_id:
                 partner = await session.get(Partner, acc.partner_id)
-                await _notify_partner_tg(
-                    bot, partner,
-                    f"❌ *Твой аккаунт отклонён*\n\n"
-                    f"Аккаунт #{acc.id} · {acc.rank}\n\n"
-                    f"*Причина:* {reason}\n\n"
-                    f"Исправь проблему и добавь аккаунт заново."
-                )
-
+                await _notify_partner_tg(bot, partner, f"❌ *Твой аккаунт отклонён*\n\nАккаунт #{acc.id} · {acc.rank}\n\n*Причина:* {reason}\n\nИсправь проблему и добавь аккаунт заново.")
     raise web.HTTPFound("/partners/approvals")
 
 
 async def partners_passwords(request: web.Request):
     async with async_session() as session:
-        pending = (await session.execute(
-            select(Account).where(Account.status == "awaiting_approval").order_by(Account.password_changed_at)
-        )).scalars().all()
-
+        pending = (await session.execute(select(Account).where(Account.status == "awaiting_approval").order_by(Account.password_changed_at))).scalars().all()
         items = []
         for acc in pending:
             partner = await session.get(Partner, acc.partner_id) if acc.partner_id else None
@@ -1076,7 +793,6 @@ async def partners_passwords(request: web.Request):
 async def partner_password_approve(request: web.Request):
     acc_id = int(request.match_info["id"])
     bot = request.app["bot"]
-
     async with async_session() as session:
         acc = await session.get(Account, acc_id)
         if acc and acc.status == "awaiting_approval":
@@ -1087,22 +803,10 @@ async def partner_password_approve(request: web.Request):
             acc.rented_until = None
             acc.reserved_at = None
             await session.commit()
-
-            notifications.push(
-                "✅ Пароль принят",
-                f"#{acc.id} — аккаунт снова в магазине",
-                level="success", category="partner",
-            )
-
+            notifications.push("✅ Пароль принят", f"#{acc.id} — аккаунт снова в магазине", level="success", category="partner")
             if acc.partner_id:
                 partner = await session.get(Partner, acc.partner_id)
-                await _notify_partner_tg(
-                    bot, partner,
-                    f"✅ *Пароль принят*\n\n"
-                    f"Аккаунт #{acc.id} · {acc.rank}\n"
-                    f"Снова в магазине, ждёт следующего арендатора."
-                )
-
+                await _notify_partner_tg(bot, partner, f"✅ *Пароль принят*\n\nАккаунт #{acc.id} · {acc.rank}\nСнова в магазине, ждёт следующего арендатора.")
     raise web.HTTPFound("/partners/passwords")
 
 
@@ -1111,40 +815,21 @@ async def partner_password_reject(request: web.Request):
     data = await request.post()
     reason = (data.get("reason") or "Пароль не работает").strip()
     bot = request.app["bot"]
-
     async with async_session() as session:
         acc = await session.get(Account, acc_id)
         if acc and acc.status == "awaiting_approval":
             acc.status = "awaiting_review"
             await session.commit()
-
-            notifications.push(
-                "❌ Пароль отклонён",
-                f"#{acc.id} · {acc.rank} — {reason}",
-                level="danger", category="partner",
-            )
-
+            notifications.push("❌ Пароль отклонён", f"#{acc.id} · {acc.rank} — {reason}", level="danger", category="partner")
             if acc.partner_id:
                 partner = await session.get(Partner, acc.partner_id)
-                await _notify_partner_tg(
-                    bot, partner,
-                    f"❌ *Пароль не принят*\n\n"
-                    f"Аккаунт #{acc.id} · {acc.rank}\n\n"
-                    f"*Причина:* {reason}\n\n"
-                    f"Смени пароль правильно и отправь заново."
-                )
-
+                await _notify_partner_tg(bot, partner, f"❌ *Пароль не принят*\n\nАккаунт #{acc.id} · {acc.rank}\n\n*Причина:* {reason}\n\nСмени пароль правильно и отправь заново.")
     raise web.HTTPFound("/partners/passwords")
 
 
 async def partners_payouts(request: web.Request):
     async with async_session() as session:
-        payouts_raw = (await session.execute(
-            select(PartnerPayout)
-            .where(PartnerPayout.status == "requested")
-            .order_by(PartnerPayout.requested_at)
-        )).scalars().all()
-
+        payouts_raw = (await session.execute(select(PartnerPayout).where(PartnerPayout.status == "requested").order_by(PartnerPayout.requested_at))).scalars().all()
         items = []
         for po in payouts_raw:
             partner = await session.get(Partner, po.partner_id)
@@ -1159,32 +844,15 @@ async def partner_payout_pay(request: web.Request):
     data = await request.post()
     note = (data.get("note") or "").strip()
     bot = request.app["bot"]
-
     async with async_session() as session:
         po = await session.get(PartnerPayout, po_id)
-        if not po:
-            raise web.HTTPFound("/partners/payouts")
-
-        if note:
-            po.note = note
-
+        if not po: raise web.HTTPFound("/partners/payouts")
+        if note: po.note = note
         success = await approve_payout(session, po)
-
         if success:
             partner = await session.get(Partner, po.partner_id)
-            await _notify_partner_tg(
-                bot, partner,
-                f"💸 *Выплата выполнена*\n\n"
-                f"Сумма: *{po.amount:.0f} ₽*\n\n"
-                f"Спасибо за работу!"
-            )
-
-            notifications.push(
-                "💸 Выплата партнёру",
-                f"{partner.full_name if partner else '?'} — {po.amount:.0f} ₽",
-                level="success", category="partner",
-            )
-
+            await _notify_partner_tg(bot, partner, f"💸 *Выплата выполнена*\n\nСумма: *{po.amount:.0f} ₽*\n\nСпасибо за работу!")
+            notifications.push("💸 Выплата партнёру", f"{partner.full_name if partner else '?'} — {po.amount:.0f} ₽", level="success", category="partner")
     raise web.HTTPFound("/partners/payouts")
 
 
@@ -1193,30 +861,14 @@ async def partner_payout_reject(request: web.Request):
     data = await request.post()
     reason = (data.get("reason") or "Отклонено").strip()
     bot = request.app["bot"]
-
     async with async_session() as session:
         po = await session.get(PartnerPayout, po_id)
-        if not po:
-            raise web.HTTPFound("/partners/payouts")
-
+        if not po: raise web.HTTPFound("/partners/payouts")
         success = await reject_payout(session, po, reason)
-
         if success:
             partner = await session.get(Partner, po.partner_id)
-            await _notify_partner_tg(
-                bot, partner,
-                f"❌ *Запрос на выплату отклонён*\n\n"
-                f"Сумма: {po.amount:.0f} ₽\n"
-                f"*Причина:* {reason}\n\n"
-                f"Деньги возвращены на баланс. Проверь реквизиты и запроси снова."
-            )
-
-            notifications.push(
-                "❌ Выплата отклонена",
-                f"Партнёр #{po.partner_id} — {reason}",
-                level="danger", category="partner",
-            )
-
+            await _notify_partner_tg(bot, partner, f"❌ *Запрос на выплату отклонён*\n\nСумма: {po.amount:.0f} ₽\n*Причина:* {reason}\n\nДеньги возвращены на баланс. Проверь реквизиты и запроси снова.")
+            notifications.push("❌ Выплата отклонена", f"Партнёр #{po.partner_id} — {reason}", level="danger", category="partner")
     raise web.HTTPFound("/partners/payouts")
 
 
@@ -1275,5 +927,6 @@ def create_web_app(bot):
     app.router.add_post("/partners/{id}/unblock", partner_unblock)
     app.router.add_post("/partners/{id}/payout", partner_payout_direct)
 
+    app.router.add_static('/static', path='static')
     register_photo_route(app, bot)
     return app
