@@ -1,122 +1,117 @@
 {% extends "base.html" %}
+{% from "_macros.html" import status_badge %}
 {% block title %}#{{ a.id }} {{ a.rank }}{% endblock %}
 {% block content %}
-<div class="flex items-center justify-between mb-2 flex-wrap gap-2">
-  <a href="/accounts" class="text-accent hover:underline text-sm">← к списку</a>
+<div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+  <a href="/accounts" class="text-sm text-muted hover:text-accent inline-flex items-center gap-1"><i data-lucide="arrow-left" class="w-4 h-4"></i>к списку</a>
   <div class="flex gap-2 flex-wrap">
     {% if a.status == 'pending_approval' %}
-      <form method="post" action="/partners/approvals/{{ a.id }}/approve">
-        <button class="btn !bg-emerald-600 hover:!bg-emerald-500 text-white !py-1.5 text-sm">✅ Одобрить</button>
-      </form>
-      <form method="post" action="/partners/approvals/{{ a.id }}/reject" class="flex gap-1">
-        <input name="reason" required placeholder="Причина" class="input !py-1.5 !w-40 text-sm">
-        <button class="btn !bg-rose-600 hover:!bg-rose-500 text-white !py-1.5 text-sm">❌</button>
+      <form method="post" action="/partners/approvals/{{ a.id }}/approve"><button class="btn btn-ok btn-sm"><i data-lucide="check" class="w-4 h-4"></i>Одобрить</button></form>
+      <form method="post" action="/partners/approvals/{{ a.id }}/reject" class="flex gap-1.5">
+        <input name="reason" required placeholder="Причина" class="input !py-1.5 !w-40 text-xs">
+        <button class="btn btn-danger btn-sm"><i data-lucide="x" class="w-4 h-4"></i></button>
       </form>
     {% elif a.status == 'awaiting_approval' %}
-      <form method="post" action="/partners/passwords/{{ a.id }}/approve">
-        <button class="btn !bg-emerald-600 hover:!bg-emerald-500 text-white !py-1.5 text-sm">✅ Пароль верный</button>
-      </form>
-      <form method="post" action="/partners/passwords/{{ a.id }}/reject" class="flex gap-1">
-        <input name="reason" required placeholder="Причина" class="input !py-1.5 !w-40 text-sm">
-        <button class="btn !bg-rose-600 hover:!bg-rose-500 text-white !py-1.5 text-sm">❌</button>
+      <form method="post" action="/partners/passwords/{{ a.id }}/approve"><button class="btn btn-ok btn-sm"><i data-lucide="check" class="w-4 h-4"></i>Пароль верный</button></form>
+      <form method="post" action="/partners/passwords/{{ a.id }}/reject" class="flex gap-1.5">
+        <input name="reason" required placeholder="Причина" class="input !py-1.5 !w-40 text-xs">
+        <button class="btn btn-danger btn-sm"><i data-lucide="x" class="w-4 h-4"></i></button>
       </form>
     {% else %}
-      <a href="/accounts/{{ a.id }}/edit" class="btn btn-primary !py-1.5 text-sm">✏️ Редактировать</a>
+      <a href="/accounts/{{ a.id }}/edit" class="btn btn-ghost btn-sm"><i data-lucide="pencil" class="w-4 h-4"></i>Редактировать</a>
     {% endif %}
   </div>
 </div>
 
-<h1 class="text-2xl font-bold mb-1">
-  #{{ a.id }} · {{ a.rank }}
-  {% if a.tier == "premium" %}
-    <span class="ml-2 inline-block bg-purple-900/50 text-purple-300 text-sm px-2 py-0.5 rounded border border-purple-500/30 align-middle">💎 Premium</span>
-  {% endif %}
+<h1 class="text-2xl font-bold mb-2 flex flex-wrap items-center gap-3">
+  <span>#{{ a.id }} · {{ a.rank }}</span>
+  {% if a.tier == "premium" %}<span class="badge b-prem"><i data-lucide="gem" class="w-3 h-3"></i>Premium</span>{% endif %}
 </h1>
 {% if a.partner_id %}
-  <div class="text-sm mb-3">
-    <span class="bg-indigo-900/50 text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/30">🤝 Партнёрский</span>
-    <span class="text-muted ml-2">ID партнёра: </span>
-    <a href="/partners/{{ a.partner_id }}" class="text-accent hover:underline">#{{ a.partner_id }}</a>
-  </div>
+<div class="text-sm mb-4 flex items-center gap-2 flex-wrap">
+  <span class="badge b-partner"><i data-lucide="handshake" class="w-3 h-3"></i>Партнёрский</span>
+  <span class="text-muted">ID партнёра:</span><a href="/partners/{{ a.partner_id }}" class="link">#{{ a.partner_id }}</a>
+</div>
 {% endif %}
-
 {% if a.status == 'rejected' and a.reject_reason %}
-  <div class="bg-rose-900/30 text-rose-300 p-3 rounded mb-4 border border-rose-500/30">
-    <b>Причина отклонения:</b> {{ a.reject_reason }}
-  </div>
+<div class="alert alert-bad mb-4 flex gap-2"><i data-lucide="octagon-x" class="w-5 h-5 shrink-0"></i><div><b>Причина отклонения:</b> {{ a.reject_reason }}</div></div>
 {% endif %}
 
-<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+<div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
   {% if a.photo_id %}
-  <div class="card flex items-center justify-center p-4">
+  <div class="card flex items-center justify-center">
     <a href="/api/photo/{{ a.photo_id }}" target="_blank">
-      <img src="/api/photo/{{ a.photo_id }}" class="w-full max-w-xs rounded border border-line">
+      <img src="/api/photo/{{ a.photo_id }}" class="w-full max-w-xs rounded-lg border border-line shadow-[0_14px_28px_-10px_rgba(0,0,0,.85)] hover:shadow-glow transition">
     </a>
   </div>
   {% endif %}
 
-  <div class="card p-4 {% if a.photo_id %}md:col-span-2{% else %}md:col-span-3{% endif %}">
-    <div class="text-sm text-muted mb-2">Данные</div>
-    <div class="font-mono text-sm space-y-1">
-      <div><b>Riot login:</b> {{ a.login }}</div>
-      <div><b>Riot password:</b> {{ a.password }}</div>
-      <div>
-        <b>Riot ID:</b>
-        {% if a.riot_id %}
-          <a href="https://tracker.gg/valorant/profile/riot/{{ a.riot_id|urlencode }}/overview"
-             target="_blank" class="text-accent hover:underline">{{ a.riot_id }} ↗</a>
-        {% else %}<span class="text-muted">не указан</span>{% endif %}
+  <div class="card {% if a.photo_id %}md:col-span-2{% else %}md:col-span-3{% endif %}">
+    <div class="label">Данные</div>
+    <dl class="font-mono text-sm space-y-2 break-all">
+      <div class="flex flex-wrap gap-x-2"><dt class="text-muted">Riot login:</dt><dd>{{ a.login }}</dd></div>
+      <div class="flex flex-wrap gap-x-2"><dt class="text-muted">Riot password:</dt><dd>{{ a.password }}</dd></div>
+      <div class="flex flex-wrap gap-x-2 items-center"><dt class="text-muted">Riot ID:</dt>
+        <dd>{% if a.riot_id %}
+          <a href="https://tracker.gg/valorant/profile/riot/{{ a.riot_id|urlencode }}/overview" target="_blank" class="link inline-flex items-center gap-1">{{ a.riot_id }}<i data-lucide="external-link" class="w-3.5 h-3.5"></i></a>
+        {% else %}<span class="text-muted">не указан</span>{% endif %}</dd></div>
+      <div class="flex flex-wrap gap-x-2"><dt class="text-muted">Email:</dt><dd>{{ a.email or "—" }}</dd></div>
+      <div class="flex flex-wrap gap-x-2"><dt class="text-muted">Email password:</dt><dd>{{ a.email_password or "—" }}</dd></div>
+      <div class="flex flex-wrap gap-x-2 items-center"><dt class="text-muted">Статус:</dt><dd>{{ status_badge(a.status) }}</dd></div>
+      {% if a.buyer_id %}
+      <div class="mt-3 rounded-xl border border-sky-400/40 p-3 flex items-center gap-2 flex-wrap font-sans" style="background:linear-gradient(160deg,rgba(56,189,248,.14),rgba(56,189,248,.03));box-shadow:inset 0 1px 0 rgba(255,255,255,.06)">
+        <i data-lucide="user-round" class="w-4 h-4 text-sky-300"></i><span class="text-muted">Арендатор:</span>
+        <a href="tg://user?id={{ a.buyer_id }}" class="link font-mono">ID: {{ a.buyer_id }}</a>
       </div>
-      <div><b>Email:</b> {{ a.email or "—" }}</div>
-      <div><b>Email password:</b> {{ a.email_password or "—" }}</div>
-      <div><b>Статус:</b> {{ a.status }}</div>
+      {% endif %}
+    </dl>
+  </div>
+</div>
+
+<div class="card mb-6">
+  <div class="flex items-center justify-between mb-3">
+    <div class="label !mb-0">Статистика</div>
+    <div class="flex gap-1 text-sm">
+      <a href="?period=7d" class="px-2.5 py-1 rounded-md {% if period == '7d' %}bg-accent text-white shadow-glow{% else %}text-muted hover:text-ink{% endif %}">7д</a>
+      <a href="?period=30d" class="px-2.5 py-1 rounded-md {% if period == '30d' %}bg-accent text-white shadow-glow{% else %}text-muted hover:text-ink{% endif %}">30д</a>
+      <a href="?period=all" class="px-2.5 py-1 rounded-md {% if period == 'all' %}bg-accent text-white shadow-glow{% else %}text-muted hover:text-ink{% endif %}">всё</a>
     </div>
   </div>
-</div>
-
-<div class="card p-4 mb-6">
-  <div class="text-sm text-muted mb-2 flex justify-between">
-    <span>Статистика</span>
-    <span>
-      <a href="?period=7d" class="mr-2 {% if period == '7d' %}text-accent font-bold{% endif %}">7д</a>
-      <a href="?period=30d" class="mr-2 {% if period == '30d' %}text-accent font-bold{% endif %}">30д</a>
-      <a href="?period=all" class="{% if period == 'all' %}text-accent font-bold{% endif %}">всё</a>
-    </span>
-  </div>
-  <div class="grid grid-cols-3 gap-4 text-sm">
-    <div><div class="text-muted">Аренд</div><div class="text-2xl font-bold">{{ rentals }}</div></div>
-    <div><div class="text-muted">Часов</div><div class="text-2xl font-bold">{{ hours }}</div></div>
-    <div><div class="text-muted">Выручка</div><div class="text-2xl font-bold text-accent">{{ revenue }} ₽</div></div>
+  <div class="grid grid-cols-3 gap-4">
+    <div><div class="text-xs text-muted">Аренд</div><div class="num text-2xl">{{ rentals }}</div></div>
+    <div><div class="text-xs text-muted">Часов</div><div class="num text-2xl">{{ hours }}</div></div>
+    <div><div class="text-xs text-muted">Выручка</div><div class="num text-2xl text-accent glow-text">{{ revenue }} ₽</div></div>
   </div>
 </div>
 
-<h2 class="text-lg font-bold mb-2 text-white">🎮 Последние матчи</h2>
-<div class="bg-surface rounded-lg shadow overflow-hidden mb-6 border border-line/50">
+<h2 class="text-lg font-semibold mb-3 flex items-center gap-2"><span class="chip !w-8 !h-8"><i data-lucide="swords" class="w-4 h-4"></i></span>Последние матчи</h2>
+<div class="card p-0 overflow-hidden mb-6">
   {% if recent_matches %}
-    <div class="divide-y divide-line/30">
+    <div class="divide-y divide-line/40">
     {% for match in recent_matches %}
-      <div class="flex items-center px-4 py-3 hover:bg-bg/50 transition-colors">
-        <div class="w-1/3 flex items-center gap-3">
-          <div class="w-10 h-10 rounded-full bg-line flex items-center justify-center text-ink font-bold border-2 {% if match.result == 'win' %}border-emerald-500{% else %}border-rose-500{% endif %}">
+      <div class="flex items-center gap-2 px-4 py-3 transition hover:bg-accent/5 border-l-4 {% if match.result == 'win' %}border-ok{% else %}border-bad{% endif %}">
+        <div class="w-1/3 flex items-center gap-3 min-w-0">
+          <div class="w-10 h-10 shrink-0 rounded-full grid place-items-center font-bold border-2 {% if match.result == 'win' %}border-ok text-ok shadow-[0_0_14px_rgba(74,222,128,.35)]{% else %}border-bad text-bad shadow-[0_0_14px_rgba(251,113,133,.35)]{% endif %}"
+               style="background:linear-gradient(145deg,#4a4640,#2b2825)">
             {{ match.agent_name[0]|upper }}
           </div>
-          <div>
-            <div class="font-bold text-ink text-sm">{{ match.agent_name }}</div>
-            <div class="text-xs text-muted">{{ match.map_name }}</div>
+          <div class="min-w-0">
+            <div class="font-bold text-sm truncate">{{ match.agent_name }}</div>
+            <div class="text-xs text-muted truncate">{{ match.map_name }}</div>
           </div>
         </div>
+
         <div class="w-1/3 text-center">
-          <div class="font-mono font-bold text-lg {% if match.result == 'win' %}text-emerald-400{% else %}text-rose-400{% endif %}">
-            {{ match.score }}
-          </div>
-          <div class="text-[10px] uppercase tracking-wider font-bold {% if match.result == 'win' %}text-emerald-500{% else %}text-rose-500{% endif %}">
+          <div class="font-mono font-bold text-lg {% if match.result == 'win' %}text-ok{% else %}text-bad{% endif %}">{{ match.score }}</div>
+          <div class="text-[10px] uppercase tracking-wider font-bold {% if match.result == 'win' %}text-ok{% else %}text-bad{% endif %}">
             {{ "Победа" if match.result == "win" else "Поражение" }}
           </div>
         </div>
+
         <div class="w-1/3 text-right">
-          <div class="font-mono text-sm text-ink">
-            <span class="text-emerald-400">{{ match.kills }}</span> /
-            <span class="text-rose-400">{{ match.deaths }}</span> /
+          <div class="font-mono text-sm">
+            <span class="text-ok">{{ match.kills }}</span> /
+            <span class="text-bad">{{ match.deaths }}</span> /
             <span class="text-muted">{{ match.assists }}</span>
           </div>
           <div class="text-xs text-muted mt-1">{{ match.time_ago }}</div>
@@ -126,42 +121,32 @@
     </div>
   {% else %}
     <div class="p-6 text-center text-muted text-sm">
-      Нет данных о недавних матчах.
+      Нет данных о недавних матчах. Убедитесь, что Riot ID указан верно.
     </div>
   {% endif %}
 </div>
 
-<h2 class="text-lg font-bold mb-2">История аренд</h2>
-<div class="card p-0 overflow-hidden mb-6">
-<table class="w-full text-sm text-left">
-  <thead class="bg-surface border-b border-line">
-    <tr>
-      <th class="px-4 py-3">Начало</th>
-      <th class="px-4 py-3">Часы</th>
-      <th class="px-4 py-3">Сумма</th>
-      <th class="px-4 py-3">Способ</th>
-      <th class="px-4 py-3">Окончание</th>
-    </tr>
-  </thead>
-  <tbody class="divide-y divide-line/50">
+<h2 class="text-lg font-semibold mb-3">История аренд</h2>
+<div class="card p-0 overflow-hidden mb-6"><div class="overflow-x-auto">
+<table class="tbl">
+  <thead><tr><th>Начало</th><th>Часы</th><th>Сумма</th><th>Способ</th><th>Окончание</th></tr></thead>
+  <tbody>
   {% for h in history %}
     <tr>
-      <td class="px-4 py-3">{{ h.started_at.strftime("%d.%m %H:%M") }}</td>
-      <td class="px-4 py-3">{{ h.hours }} ч</td>
-      <td class="px-4 py-3 text-accent">{{ h.amount }} ₽</td>
-      <td class="px-4 py-3">{{ h.method or "—" }}</td>
-      <td class="px-4 py-3">
-        {% if h.ended_at %}{{ h.ended_at.strftime("%d.%m %H:%M") }} ({{ h.ended_reason }}){% else %}—{% endif %}
-      </td>
+      <td class="font-mono">{{ h.started_at.strftime("%d.%m %H:%M") }}</td>
+      <td class="font-mono">{{ h.hours }} ч</td>
+      <td class="font-mono text-accent">{{ h.amount }} ₽</td>
+      <td>{{ h.method or "—" }}</td>
+      <td class="font-mono text-muted">{% if h.ended_at %}{{ h.ended_at.strftime("%d.%m %H:%M") }} ({{ h.ended_reason }}){% else %}—{% endif %}</td>
     </tr>
   {% else %}
-    <tr><td colspan="5" class="px-4 py-4 text-center text-muted">Аренд не было</td></tr>
+    <tr><td colspan="5" class="py-6 text-center text-muted">Аренд не было</td></tr>
   {% endfor %}
   </tbody>
-</table>
-</div>
+</table></div></div>
 
-<form method="post" action="/accounts/{{ a.id }}/delete" onsubmit="return confirm('Удалить аккаунт #{{ a.id }}?')">
-  <button class="text-rose-500 text-sm hover:text-rose-400 hover:underline">🗑 Удалить аккаунт</button>
+<form method="post" action="/accounts/{{ a.id }}/delete"
+      onsubmit="return confirm('Удалить аккаунт #{{ a.id }}?')">
+  <button class="btn btn-danger"><i data-lucide="trash-2" class="w-4 h-4"></i>Удалить аккаунт</button>
 </form>
 {% endblock %}

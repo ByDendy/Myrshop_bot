@@ -1,35 +1,38 @@
 {% extends "base.html" %}
 {% block title %}Выплаты{% endblock %}
 {% block content %}
-<a href="/partners" class="text-accent hover:underline text-sm mb-2 inline-block">← к дашборду</a>
-<h1 class="text-2xl font-bold mt-1 mb-4">💰 Запросы на выплату ({{ payouts|length }})</h1>
+<a href="/partners" class="text-sm text-muted hover:text-accent inline-flex items-center gap-1"><i data-lucide="arrow-left" class="w-4 h-4"></i>к дашборду</a>
+<h1 class="text-2xl font-bold mt-1 mb-4 flex items-center gap-2"><i data-lucide="wallet" class="text-accent"></i>Запросы на выплату <span class="text-muted font-mono text-lg">({{ payouts|length }})</span></h1>
 
 {% if not payouts %}
-  <div class="card p-8 text-center text-muted">✅ Нет активных запросов</div>
+  <div class="card !p-10 text-center text-muted"><i data-lucide="check-circle-2" class="mx-auto mb-2 text-ok w-8 h-8"></i>Нет активных запросов</div>
 {% else %}
-<div class="space-y-3">
+<div class="space-y-3 rise">
   {% for item in payouts %}
     {% set po = item.payout %}
     {% set partner = item.partner %}
-    <div class="card p-5 flex items-center justify-between flex-wrap gap-4">
-      <div>
-        <a href="/partners/{{ partner.id }}" class="font-bold text-accent hover:underline">
-          {{ partner.full_name or partner.username }}
-        </a>
-        <div class="text-xs text-muted mt-1">запрос {{ po.requested_at.strftime('%d.%m %H:%M') }}</div>
-        <div class="text-xs font-mono text-muted mt-1">
-          💳 {{ partner.payment_details or 'реквизиты не указаны' }}
+    <div class="card card-hover !p-5">
+      <div class="flex items-center justify-between flex-wrap gap-4 mb-4">
+        <div class="flex items-center gap-3">
+          <span class="avatar">{{ (partner.full_name or partner.username or '?')[0]|upper }}</span>
+          <div>
+            <a href="/partners/{{ partner.id }}" class="font-semibold link">{{ partner.full_name or partner.username }}</a>
+            <div class="text-xs font-mono text-muted">запрос {{ po.requested_at.strftime('%d.%m %H:%M') }}</div>
+          </div>
         </div>
+        <div class="num text-3xl text-ok" style="text-shadow:0 0 22px rgba(74,222,128,.4)">{{ po.amount }} ₽</div>
       </div>
-      <div class="text-2xl font-bold text-accent">{{ po.amount }} ₽</div>
-      <div class="flex gap-2">
-        <form method="post" action="/partners/payouts/{{ po.id }}/pay" class="inline flex gap-2">
-          <input name="note" placeholder="Комментарий (опц.)" class="input !py-1.5 w-56 text-sm">
-          <button class="btn !bg-emerald-600 hover:!bg-emerald-500 text-white !py-1.5 text-sm">✅ Выплачено</button>
+      <div class="bg-bg rounded-xl p-3 border border-line/60 font-mono text-xs mb-4 flex items-center gap-2 break-all" style="box-shadow:inset 0 2px 5px rgba(0,0,0,.5)">
+        <i data-lucide="credit-card" class="w-4 h-4 text-muted shrink-0"></i>{{ partner.payment_details or 'реквизиты не указаны' }}
+      </div>
+      <div class="flex gap-2 flex-wrap border-t border-line/60 pt-4">
+        <form method="post" action="/partners/payouts/{{ po.id }}/pay" class="flex gap-2 flex-1 min-w-[16rem]">
+          <input name="note" placeholder="Комментарий (опц.)" class="input flex-1">
+          <button class="btn btn-ok"><i data-lucide="check" class="w-4 h-4"></i>Выплачено</button>
         </form>
-        <form method="post" action="/partners/payouts/{{ po.id }}/reject" class="inline flex gap-2">
-          <input name="reason" required placeholder="Причина отклонения" class="input !py-1.5 w-56 text-sm">
-          <button class="btn !bg-rose-600 hover:!bg-rose-500 text-white !py-1.5 text-sm">❌ Отклонить</button>
+        <form method="post" action="/partners/payouts/{{ po.id }}/reject" class="flex gap-2 flex-1 min-w-[16rem]">
+          <input name="reason" required placeholder="Причина отклонения" class="input flex-1">
+          <button class="btn btn-danger"><i data-lucide="x" class="w-4 h-4"></i>Отклонить</button>
         </form>
       </div>
     </div>
