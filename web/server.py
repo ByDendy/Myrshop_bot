@@ -368,137 +368,7 @@ async def mark_password_changed(request: web.Request):
     raise web.HTTPFound("/password-change")
 
 
-# ─── Экспорт ───
-
-async def export_page(request: web.Request):
-    if request.query.get("download") == "1":
-        async with async_session() as session:
-            accounts = (await session.execute(
-                select(Account).order_by(Account.id)
-            )).scalars().all()
-        lines = [
-            f"{a.login};;{a.password};;{a.rank};;"
-            f"{a.price_3h:g},{a.price_6h:g},{a.price_12h:g}"
-            for a in accounts
-        ]
-        return web.Response(
-            body="\n".join(lines), content_type="text/plain",
-            headers={"Content-Disposition": 'attachment; filename="accounts.txt"'},
-        )
-    html = env.get_template("export.html").render()
-    return web.Response(text=html, content_type="text/html")
-
-
-# ─── API уведомлений ───
-
-async def notifications_api(request: web.Request):
-    since_id = int(request.query.get("since", "0"))
-    return web.json_response(notifications.since(since_id))
-
-
-async def notifications_page(request: web.Request):
-    cat = request.query.get("cat", "all")
-    events = notifications.get_all(category=cat)
-    html = env.get_template("notifications.html").render(events=events, cat=cat)
-    return web.Response(text=html, content_type="text/html")
-
-
-# ─── Настройки ───
-
-async def settings_page(request: web.Request):
-    error = None
-    success = None
-
-    async with async_session() as session:
-        if request.method == "POST":
-            post = await request.post()
-            action = post.get("action")
-
-            if action == "save_commission":
-                try:
-                    commission = float(post.get("commission", "10"))
-                    if commission < 0 or commission > 100:
-                        raise ValueError("должно быть 0–100")
-                    await set_setting(session, "partner_commission", str(commission))
-                    success = f"Комиссия обновлена: {commission}%"
-                except (ValueError, KeyError) as e:
-                    error = f"Неверная комиссия: {e}"
-
-            elif action == "add_rank":
-                try:
-                    rank_name = post["rank"].strip()
-                    if not rank_name:
-                        raise ValueError("название ранга обязательно")
-                    p3 = float(post["price_3h"])
-                    p6 = float(post["price_6h"])
-                    p12 = float(post["price_12h"])
-                    if p3 <= 0 or p6 <= 0 or p12 <= 0:
-                        raise ValueError("все цены должны быть больше 0")
-                    if p6 < p3 or p12 < p6:
-                        raise ValueError("цены должны расти: 3ч ≤ 6ч ≤ 12ч")
-
-                    existing = (await session.execute(
-                        select(RankSetting).where(RankSetting.rank == rank_name)
-                    )).scalar_one_or_none()
-
-                    if existing:
-                        existing.min_price_3h = p3
-                        existing.min_price_6h = p6
-                        existing.min_price_12h = p12
-                        success = f"Ранг {rank_name} обновлён"
-                    else:
-                        session.add(RankSetting(
-                            rank=rank_name,
-                            min_price_3h=p3, min_price_6h=p6, min_price_12h=p12,
-                        ))
-                        success = f"Ранг {rank_name} добавлен"
-                    await session.commit()
-                except (ValueError, KeyError) as e:
-                    error = f"Ошибка: {e}"
-
-            elif action == "delete_rank":
-                try:
-                    rank_id = int(post["rank_id"])
-                    rank_row = await session.get(RankSetting, rank_id)
-                    if rank_row:
-                        name = rank_row.rank
-                        await session.delete(rank_row)
-                        await session.commit()
-                        success = f"Ранг {name} удалён"
-                except (ValueError, KeyError) as e:
-                    error = f"Ошибка удаления: {e}"
-
-        commission_str = await get_setting(session, "partner_commission", "10")
-        try:
-            commission_float = float(commission_str)
-        except (TypeError, ValueError):
-            commission_float = 10.0
-        partner_share = 100.0 - commission_float
-
-        ranks = (await session.execute(
-            select(RankSetting).order_by(RankSetting.rank)
-        )).scalars().all()
-
-    html = env.get_template("settings.html").render(
-        commission=commission_float,
-        partner_share=round(partner_share, 1),
-        ranks=ranks, error=error, success=success,
-    )
-    return web.Response(text=html, content_type="text/html")
-
-
-# ═══════════════════════════════════════════════════════════════
-# ПАРТНЁРЫ (без изменений — оставь свою версию)
-# ═══════════════════════════════════════════════════════════════
-
-# ... все функции partners_* (partners_dashboard, partners_list, partner_detail,
-#     partner_block, partner_unblock, partner_payout_direct, partners_approvals,
-#     partner_approve, partner_reject, partners_passwords,
-#     partner_password_approve, partner_password_reject, partners_payouts,
-#     partner_payout_pay, partner_payout_reject) — ОСТАВЬ КАК ЕСТЬ, не трогай.
-# ═══════════════════════════════════════════════════════════════
-# ПОКУПАТЕЛИ
-# ═══════════════════════════════════════════════════════════════
+# ─── Покупатели ───
 
 async def customers_list(request: web.Request):
     async with async_session() as session:
@@ -643,8 +513,630 @@ async def customer_unban(request: web.Request):
             await session.commit()
             notifications.push("✅ Покупатель разбанен", f"ID {customer_id}", level="success")
     raise web.HTTPFound(f"/customers/{customer_id}")
-    # Покупатели
+
+
+# ─── Экспорт ───
+
+async def export_page(request: web.Request):
+    if request.query.get("download") == "1":
+        async with async_session() as session:
+            accounts = (await session.execute(
+                select(Account).order_by(Account.id)
+            )).scalars().all()
+        lines = [
+            f"{a.login};;{a.password};;{a.rank};;"
+            f"{a.price_3h:g},{a.price_6h:g},{a.price_12h:g}"
+            for a in accounts
+        ]
+        return web.Response(
+            body="\n".join(lines), content_type="text/plain",
+            headers={"Content-Disposition": 'attachment; filename="accounts.txt"'},
+        )
+    html = env.get_template("export.html").render()
+    return web.Response(text=html, content_type="text/html")
+
+
+# ─── API уведомлений ───
+
+async def notifications_api(request: web.Request):
+    since_id = int(request.query.get("since", "0"))
+    return web.json_response(notifications.since(since_id))
+
+
+async def notifications_page(request: web.Request):
+    cat = request.query.get("cat", "all")
+    events = notifications.get_all(category=cat)
+    html = env.get_template("notifications.html").render(events=events, cat=cat)
+    return web.Response(text=html, content_type="text/html")
+
+
+# ─── Настройки ───
+
+async def settings_page(request: web.Request):
+    error = None
+    success = None
+
+    async with async_session() as session:
+        if request.method == "POST":
+            post = await request.post()
+            action = post.get("action")
+
+            if action == "save_commission":
+                try:
+                    commission = float(post.get("commission", "10"))
+                    if commission < 0 or commission > 100:
+                        raise ValueError("должно быть 0–100")
+                    await set_setting(session, "partner_commission", str(commission))
+                    success = f"Комиссия обновлена: {commission}%"
+                except (ValueError, KeyError) as e:
+                    error = f"Неверная комиссия: {e}"
+
+            elif action == "add_rank":
+                try:
+                    rank_name = post["rank"].strip()
+                    if not rank_name:
+                        raise ValueError("название ранга обязательно")
+                    p3 = float(post["price_3h"])
+                    p6 = float(post["price_6h"])
+                    p12 = float(post["price_12h"])
+                    if p3 <= 0 or p6 <= 0 or p12 <= 0:
+                        raise ValueError("все цены должны быть больше 0")
+                    if p6 < p3 or p12 < p6:
+                        raise ValueError("цены должны расти: 3ч ≤ 6ч ≤ 12ч")
+
+                    existing = (await session.execute(
+                        select(RankSetting).where(RankSetting.rank == rank_name)
+                    )).scalar_one_or_none()
+
+                    if existing:
+                        existing.min_price_3h = p3
+                        existing.min_price_6h = p6
+                        existing.min_price_12h = p12
+                        success = f"Ранг {rank_name} обновлён"
+                    else:
+                        session.add(RankSetting(
+                            rank=rank_name,
+                            min_price_3h=p3, min_price_6h=p6, min_price_12h=p12,
+                        ))
+                        success = f"Ранг {rank_name} добавлен"
+                    await session.commit()
+                except (ValueError, KeyError) as e:
+                    error = f"Ошибка: {e}"
+
+            elif action == "delete_rank":
+                try:
+                    rank_id = int(post["rank_id"])
+                    rank_row = await session.get(RankSetting, rank_id)
+                    if rank_row:
+                        name = rank_row.rank
+                        await session.delete(rank_row)
+                        await session.commit()
+                        success = f"Ранг {name} удалён"
+                except (ValueError, KeyError) as e:
+                    error = f"Ошибка удаления: {e}"
+
+        commission_str = await get_setting(session, "partner_commission", "10")
+        try:
+            commission_float = float(commission_str)
+        except (TypeError, ValueError):
+            commission_float = 10.0
+        partner_share = 100.0 - commission_float
+
+        ranks = (await session.execute(
+            select(RankSetting).order_by(RankSetting.rank)
+        )).scalars().all()
+
+    html = env.get_template("settings.html").render(
+        commission=commission_float,
+        partner_share=round(partner_share, 1),
+        ranks=ranks, error=error, success=success,
+    )
+    return web.Response(text=html, content_type="text/html")
+
+
+# ═══════════════════════════════════════════════════════════════
+# ПАРТНЁРЫ
+# ═══════════════════════════════════════════════════════════════
+
+async def partners_dashboard(request: web.Request):
+    async with async_session() as session:
+        partners_active = (await session.execute(
+            select(func.count(Partner.id)).where(Partner.status == "active")
+        )).scalar() or 0
+
+        accounts_total = (await session.execute(
+            select(func.count(Account.id)).where(Account.partner_id.isnot(None))
+        )).scalar() or 0
+
+        pending_moderation = (await session.execute(
+            select(func.count(Account.id)).where(
+                Account.status.in_(["pending_approval", "awaiting_approval"])
+            )
+        )).scalar() or 0
+
+        pending_payouts = (await session.execute(
+            select(func.count(PartnerPayout.id)).where(
+                PartnerPayout.status == "requested"
+            )
+        )).scalar() or 0
+
+        pending_payout_amount = (await session.execute(
+            select(func.coalesce(func.sum(PartnerPayout.amount), 0)).where(
+                PartnerPayout.status == "requested"
+            )
+        )).scalar() or 0
+
+        cutoff = datetime.utcnow() - timedelta(days=30)
+        revenue_30d = (await session.execute(
+            select(func.coalesce(func.sum(PartnerEarning.amount), 0)).where(
+                PartnerEarning.created_at >= cutoff
+            )
+        )).scalar() or 0
+
+        total_balance = (await session.execute(
+            select(func.coalesce(func.sum(Partner.balance), 0))
+        )).scalar() or 0
+        total_frozen = (await session.execute(
+            select(func.coalesce(func.sum(Partner.frozen_balance), 0))
+        )).scalar() or 0
+        total_paid = (await session.execute(
+            select(func.coalesce(func.sum(Partner.total_paid), 0))
+        )).scalar() or 0
+
+        recent_events_raw = notifications.get_all(category="partner")[:10]
+        recent_events = [
+            {
+                "partner_id": 0, "partner_name": "—",
+                "event": e["title"] + (" — " + e["text"] if e["text"] else ""),
+                "ts": e["ts"],
+            }
+            for e in recent_events_raw
+        ]
+
+    html = env.get_template("partners_dashboard.html").render(
+        partners_active=partners_active,
+        accounts_total=accounts_total,
+        pending_moderation=pending_moderation,
+        pending_payouts=pending_payouts,
+        pending_payout_amount=round(pending_payout_amount),
+        revenue_30d=round(revenue_30d),
+        total_balance=round(total_balance),
+        total_frozen=round(total_frozen),
+        total_paid=round(total_paid),
+        recent_events=recent_events,
+    )
+    return web.Response(text=html, content_type="text/html")
+
+
+async def partners_list(request: web.Request):
+    q = request.query.get("q", "").strip()
+    status_filter = request.query.get("status", "").strip()
+
+    async with async_session() as session:
+        query = select(Partner)
+        if q:
+            query = query.where(or_(
+                Partner.full_name.ilike(f"%{q}%"),
+                Partner.username.ilike(f"%{q}%"),
+            ))
+        if status_filter:
+            query = query.where(Partner.status == status_filter)
+        query = query.order_by(Partner.id.desc())
+
+        partners_raw = (await session.execute(query)).scalars().all()
+
+        partners_data = []
+        for p in partners_raw:
+            cnt = (await session.execute(
+                select(func.count(Account.id)).where(Account.partner_id == p.id)
+            )).scalar() or 0
+            partners_data.append({
+                "id": p.id,
+                "full_name": p.full_name,
+                "username": p.username,
+                "telegram_id": p.telegram_id,
+                "balance": round(p.balance or 0),
+                "total_earned": round(p.total_earned or 0),
+                "status": p.status,
+                "accounts_count": cnt,
+            })
+
+    html = env.get_template("partners_list.html").render(
+        partners=partners_data, q=q, status_filter=status_filter,
+    )
+    return web.Response(text=html, content_type="text/html")
+
+
+async def partner_detail(request: web.Request):
+    partner_id = int(request.match_info["id"])
+    async with async_session() as session:
+        partner = await session.get(Partner, partner_id)
+        if not partner:
+            raise web.HTTPNotFound()
+
+        accounts = (await session.execute(
+            select(Account).where(Account.partner_id == partner_id).order_by(Account.id.desc())
+        )).scalars().all()
+
+        payouts = (await session.execute(
+            select(PartnerPayout)
+            .where(PartnerPayout.partner_id == partner_id)
+            .order_by(desc(PartnerPayout.requested_at))
+            .limit(20)
+        )).scalars().all()
+
+        earnings = (await session.execute(
+            select(PartnerEarning)
+            .where(PartnerEarning.partner_id == partner_id)
+            .order_by(desc(PartnerEarning.created_at))
+            .limit(30)
+        )).scalars().all()
+
+        acc_map = {a.id: a for a in accounts}
+
+        pending_request = (await session.execute(
+            select(PartnerPayout).where(
+                PartnerPayout.partner_id == partner_id,
+                PartnerPayout.status == "requested",
+            ).limit(1)
+        )).scalar_one_or_none()
+
+    html = env.get_template("partner_detail.html").render(
+        p=partner, accounts=accounts, payouts=payouts,
+        earnings=earnings, acc_map=acc_map,
+        pending_request=pending_request,
+    )
+    return web.Response(text=html, content_type="text/html")
+
+
+async def partner_block(request: web.Request):
+    partner_id = int(request.match_info["id"])
+    async with async_session() as session:
+        p = await session.get(Partner, partner_id)
+        if p:
+            p.status = "blocked"
+            await session.commit()
+    raise web.HTTPFound(f"/partners/{partner_id}")
+
+
+async def partner_unblock(request: web.Request):
+    partner_id = int(request.match_info["id"])
+    async with async_session() as session:
+        p = await session.get(Partner, partner_id)
+        if p:
+            p.status = "active"
+            await session.commit()
+    raise web.HTTPFound(f"/partners/{partner_id}")
+
+
+async def partner_payout_direct(request: web.Request):
+    partner_id = int(request.match_info["id"])
+    bot = request.app["bot"]
+
+    async with async_session() as session:
+        p = await session.get(Partner, partner_id)
+        if not p:
+            raise web.HTTPFound(f"/partners/{partner_id}")
+
+        payout, error = await manual_payout(session, p)
+        if error:
+            raise web.HTTPFound(f"/partners/{partner_id}")
+
+        notifications.push(
+            "💸 Выплата партнёру",
+            f"{p.full_name} — {payout.amount:.0f} ₽",
+            level="success", category="partner",
+        )
+
+        await _notify_partner_tg(
+            bot, p,
+            f"💸 *Выплата выполнена*\n\n"
+            f"Сумма: *{payout.amount:.0f} ₽*\n\n"
+            f"Спасибо за работу! Продолжай в том же духе 🤝"
+        )
+
+    raise web.HTTPFound(f"/partners/{partner_id}")
+
+
+async def partners_approvals(request: web.Request):
+    async with async_session() as session:
+        pending = (await session.execute(
+            select(Account).where(Account.status == "pending_approval").order_by(Account.created_at)
+        )).scalars().all()
+
+        items = []
+        for acc in pending:
+            partner = await session.get(Partner, acc.partner_id) if acc.partner_id else None
+            rank_setting = (await session.execute(
+                select(RankSetting).where(RankSetting.rank == acc.rank)
+            )).scalar_one_or_none()
+            items.append({
+                "account": acc,
+                "partner": partner,
+                "min_3h": rank_setting.min_price_3h if rank_setting else 0,
+                "min_6h": rank_setting.min_price_6h if rank_setting else 0,
+                "min_12h": rank_setting.min_price_12h if rank_setting else 0,
+            })
+
+    html = env.get_template("partners_approvals.html").render(accounts=items)
+    return web.Response(text=html, content_type="text/html")
+
+
+async def partner_approve(request: web.Request):
+    acc_id = int(request.match_info["id"])
+    bot = request.app["bot"]
+
+    async with async_session() as session:
+        acc = await session.get(Account, acc_id)
+        if acc and acc.status == "pending_approval":
+            acc.status = "free"
+            acc.approved_at = datetime.utcnow()
+            await session.commit()
+
+            notifications.push(
+                "✅ Аккаунт одобрен",
+                f"#{acc.id} · {acc.rank}",
+                level="success", category="partner",
+            )
+
+            if acc.partner_id:
+                partner = await session.get(Partner, acc.partner_id)
+                await _notify_partner_tg(
+                    bot, partner,
+                    f"✅ *Твой аккаунт одобрен!*\n\n"
+                    f"Аккаунт #{acc.id} · {acc.rank}\n"
+                    f"Теперь он в магазине и доступен для аренды."
+                )
+
+    raise web.HTTPFound("/partners/approvals")
+
+
+async def partner_reject(request: web.Request):
+    acc_id = int(request.match_info["id"])
+    data = await request.post()
+    reason = (data.get("reason") or "Причина не указана").strip()
+    bot = request.app["bot"]
+
+    async with async_session() as session:
+        acc = await session.get(Account, acc_id)
+        if acc and acc.status == "pending_approval":
+            acc.status = "rejected"
+            acc.reject_reason = reason
+            await session.commit()
+
+            notifications.push(
+                "❌ Аккаунт отклонён",
+                f"#{acc.id} · {acc.rank} — {reason}",
+                level="danger", category="partner",
+            )
+
+            if acc.partner_id:
+                partner = await session.get(Partner, acc.partner_id)
+                await _notify_partner_tg(
+                    bot, partner,
+                    f"❌ *Твой аккаунт отклонён*\n\n"
+                    f"Аккаунт #{acc.id} · {acc.rank}\n\n"
+                    f"*Причина:* {reason}\n\n"
+                    f"Исправь проблему и добавь аккаунт заново."
+                )
+
+    raise web.HTTPFound("/partners/approvals")
+
+
+async def partners_passwords(request: web.Request):
+    async with async_session() as session:
+        pending = (await session.execute(
+            select(Account).where(Account.status == "awaiting_approval").order_by(Account.password_changed_at)
+        )).scalars().all()
+
+        items = []
+        for acc in pending:
+            partner = await session.get(Partner, acc.partner_id) if acc.partner_id else None
+            items.append({"account": acc, "partner": partner})
+
+    html = env.get_template("partners_passwords.html").render(accounts=items)
+    return web.Response(text=html, content_type="text/html")
+
+
+async def partner_password_approve(request: web.Request):
+    acc_id = int(request.match_info["id"])
+    bot = request.app["bot"]
+
+    async with async_session() as session:
+        acc = await session.get(Account, acc_id)
+        if acc and acc.status == "awaiting_approval":
+            acc.status = "free"
+            acc.password_changed_at = datetime.utcnow()
+            acc.buyer_id = None
+            acc.rental_hours = None
+            acc.rented_until = None
+            acc.reserved_at = None
+            await session.commit()
+
+            notifications.push(
+                "✅ Пароль принят",
+                f"#{acc.id} — аккаунт снова в магазине",
+                level="success", category="partner",
+            )
+
+            if acc.partner_id:
+                partner = await session.get(Partner, acc.partner_id)
+                await _notify_partner_tg(
+                    bot, partner,
+                    f"✅ *Пароль принят*\n\n"
+                    f"Аккаунт #{acc.id} · {acc.rank}\n"
+                    f"Снова в магазине, ждёт следующего арендатора."
+                )
+
+    raise web.HTTPFound("/partners/passwords")
+
+
+async def partner_password_reject(request: web.Request):
+    acc_id = int(request.match_info["id"])
+    data = await request.post()
+    reason = (data.get("reason") or "Пароль не работает").strip()
+    bot = request.app["bot"]
+
+    async with async_session() as session:
+        acc = await session.get(Account, acc_id)
+        if acc and acc.status == "awaiting_approval":
+            acc.status = "awaiting_review"
+            await session.commit()
+
+            notifications.push(
+                "❌ Пароль отклонён",
+                f"#{acc.id} · {acc.rank} — {reason}",
+                level="danger", category="partner",
+            )
+
+            if acc.partner_id:
+                partner = await session.get(Partner, acc.partner_id)
+                await _notify_partner_tg(
+                    bot, partner,
+                    f"❌ *Пароль не принят*\n\n"
+                    f"Аккаунт #{acc.id} · {acc.rank}\n\n"
+                    f"*Причина:* {reason}\n\n"
+                    f"Смени пароль правильно и отправь заново."
+                )
+
+    raise web.HTTPFound("/partners/passwords")
+
+
+async def partners_payouts(request: web.Request):
+    async with async_session() as session:
+        payouts_raw = (await session.execute(
+            select(PartnerPayout)
+            .where(PartnerPayout.status == "requested")
+            .order_by(PartnerPayout.requested_at)
+        )).scalars().all()
+
+        items = []
+        for po in payouts_raw:
+            partner = await session.get(Partner, po.partner_id)
+            items.append({"payout": po, "partner": partner})
+
+    html = env.get_template("partners_payouts.html").render(payouts=items)
+    return web.Response(text=html, content_type="text/html")
+
+
+async def partner_payout_pay(request: web.Request):
+    po_id = int(request.match_info["id"])
+    data = await request.post()
+    note = (data.get("note") or "").strip()
+    bot = request.app["bot"]
+
+    async with async_session() as session:
+        po = await session.get(PartnerPayout, po_id)
+        if not po:
+            raise web.HTTPFound("/partners/payouts")
+
+        if note:
+            po.note = note
+
+        success = await approve_payout(session, po)
+
+        if success:
+            partner = await session.get(Partner, po.partner_id)
+            await _notify_partner_tg(
+                bot, partner,
+                f"💸 *Выплата выполнена*\n\n"
+                f"Сумма: *{po.amount:.0f} ₽*\n\n"
+                f"Спасибо за работу!"
+            )
+
+            notifications.push(
+                "💸 Выплата партнёру",
+                f"{partner.full_name if partner else '?'} — {po.amount:.0f} ₽",
+                level="success", category="partner",
+            )
+
+    raise web.HTTPFound("/partners/payouts")
+
+
+async def partner_payout_reject(request: web.Request):
+    po_id = int(request.match_info["id"])
+    data = await request.post()
+    reason = (data.get("reason") or "Отклонено").strip()
+    bot = request.app["bot"]
+
+    async with async_session() as session:
+        po = await session.get(PartnerPayout, po_id)
+        if not po:
+            raise web.HTTPFound("/partners/payouts")
+
+        success = await reject_payout(session, po, reason)
+
+        if success:
+            partner = await session.get(Partner, po.partner_id)
+            await _notify_partner_tg(
+                bot, partner,
+                f"❌ *Запрос на выплату отклонён*\n\n"
+                f"Сумма: {po.amount:.0f} ₽\n"
+                f"*Причина:* {reason}\n\n"
+                f"Деньги возвращены на баланс. Проверь реквизиты и запроси снова."
+            )
+
+            notifications.push(
+                "❌ Выплата отклонена",
+                f"Партнёр #{po.partner_id} — {reason}",
+                level="danger", category="partner",
+            )
+
+    raise web.HTTPFound("/partners/payouts")
+
+
+# ─── Создание приложения ───
+
+def create_web_app(bot):
+    app = web.Application(
+        middlewares=[auth_middleware],
+        client_max_size=20 * 1024**2,
+    )
+    app["bot"] = bot
+
+    app.router.add_get("/login", login_page)
+    app.router.add_post("/login", login_page)
+    app.router.add_get("/logout", logout)
+
+    app.router.add_get("/", dashboard)
+    app.router.add_get("/accounts", accounts_list)
+    app.router.add_get("/accounts/add", account_add_page)
+    app.router.add_post("/accounts/add", account_add_page)
+    app.router.add_get("/accounts/{id}", account_detail)
+    app.router.add_get("/accounts/{id}/edit", account_edit_page)
+    app.router.add_post("/accounts/{id}/edit", account_edit_page)
+    app.router.add_post("/accounts/{id}/delete", account_delete)
+
     app.router.add_get("/customers", customers_list)
     app.router.add_get("/customers/{id}", customer_detail)
     app.router.add_post("/customers/{id}/ban", customer_ban)
     app.router.add_post("/customers/{id}/unban", customer_unban)
+
+    app.router.add_get("/password-change", awaiting_list)
+    app.router.add_post("/password-change/{id}/done", mark_password_changed)
+
+    app.router.add_get("/export", export_page)
+    app.router.add_get("/api/notifications", notifications_api)
+    app.router.add_get("/notifications", notifications_page)
+
+    app.router.add_get("/settings", settings_page)
+    app.router.add_post("/settings", settings_page)
+
+    app.router.add_get("/partners", partners_dashboard)
+    app.router.add_get("/partners/list", partners_list)
+    app.router.add_get("/partners/approvals", partners_approvals)
+    app.router.add_post("/partners/approvals/{id}/approve", partner_approve)
+    app.router.add_post("/partners/approvals/{id}/reject", partner_reject)
+    app.router.add_get("/partners/passwords", partners_passwords)
+    app.router.add_post("/partners/passwords/{id}/approve", partner_password_approve)
+    app.router.add_post("/partners/passwords/{id}/reject", partner_password_reject)
+    app.router.add_get("/partners/payouts", partners_payouts)
+    app.router.add_post("/partners/payouts/{id}/pay", partner_payout_pay)
+    app.router.add_post("/partners/payouts/{id}/reject", partner_payout_reject)
+    app.router.add_get("/partners/{id}", partner_detail)
+    app.router.add_post("/partners/{id}/block", partner_block)
+    app.router.add_post("/partners/{id}/unblock", partner_unblock)
+    app.router.add_post("/partners/{id}/payout", partner_payout_direct)
+
+    register_photo_route(app, bot)
+    return app
