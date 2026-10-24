@@ -11,17 +11,17 @@
 </div>
 
 <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3 rise">
-  <div class="stat"><div class="flex justify-between items-start mb-2"><div class="label">Активных партнёров</div><span class="chip chip-mute"><i data-lucide="users" class="w-4 h-4"></i></span></div><div class="num text-3xl">{{ partners_active }}</div></div>
-  <div class="stat"><div class="flex justify-between items-start mb-2"><div class="label">Партнёрских аккаунтов</div><span class="chip chip-mute"><i data-lucide="layers" class="w-4 h-4"></i></span></div><div class="num text-3xl">{{ accounts_total }}</div></div>
+  <div class="stat"><div class="flex justify-between items-start mb-2"><div class="label">Активных партнёров</div><span class="chip chip-mute"><i data-lucide="users" class="w-4 h-4"></i></span></div><div class="num text-3xl num-grad">{{ partners_active }}</div></div>
+  <div class="stat"><div class="flex justify-between items-start mb-2"><div class="label">Партнёрских аккаунтов</div><span class="chip chip-mute"><i data-lucide="layers" class="w-4 h-4"></i></span></div><div class="num text-3xl num-grad">{{ accounts_total }}</div></div>
   <a href="/partners/approvals" class="stat block"><div class="flex justify-between items-start mb-2"><div class="label">Ожидают модерации</div><span class="chip chip-mute"><i data-lucide="hourglass" class="w-4 h-4 text-warn"></i></span></div><div class="num text-3xl text-warn">{{ pending_moderation }}</div></a>
   <div class="stat stat-hot"><div class="flex justify-between items-start mb-2"><div class="label">Заработок партнёров (30д)</div><span class="chip"><i data-lucide="trending-up" class="w-4 h-4"></i></span></div><div class="num text-3xl text-accent glow-text">{{ revenue_30d }} ₽</div></div>
 </div>
 
 <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8 rise">
-  <div class="stat"><div class="label">Доступно к выплате</div><div class="num text-2xl">{{ total_balance }} ₽</div></div>
+  <div class="stat"><div class="label">Доступно к выплате</div><div class="num text-2xl num-grad">{{ total_balance }} ₽</div></div>
   <div class="stat"><div class="label">Заморожено (в арендах)</div><div class="num text-2xl text-warn">{{ total_frozen }} ₽</div></div>
   <div class="stat"><div class="label">В запросах на выплату</div><div class="num text-2xl text-sky-300">{{ pending_payout_amount }} ₽</div></div>
-  <div class="stat"><div class="label">Выплачено (всё время)</div><div class="num text-2xl">{{ total_paid }} ₽</div></div>
+  <div class="stat"><div class="label">Выплачено (всё время)</div><div class="num text-2xl num-grad">{{ total_paid }} ₽</div></div>
 </div>
 
 <h2 class="text-lg font-semibold mb-3 flex items-center gap-2"><i data-lucide="zap" class="w-5 h-5 text-accent"></i>Быстрые действия</h2>

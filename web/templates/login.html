@@ -2,14 +2,25 @@
 <html lang="ru"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Вход</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
-<link rel="stylesheet" href="/static/style.css">
-</head><body class="bg-bg text-ink min-h-screen flex items-center justify-center p-4">
-<form method="post" class="card p-8 w-full max-w-sm">
-  <h1 class="text-xl font-bold mb-1">MyrShop Admin</h1>
-  <p class="text-sm text-muted mb-5">Введите пароль для входа</p>
-  <input type="password" name="password" placeholder="Пароль" autofocus class="input mb-3">
-  {% if error %}<p class="text-bad text-sm mb-3">{{ error }}</p>{% endif %}
-  <button class="btn btn-primary w-full">Войти</button>
+<script src="https://unpkg.com/lucide@0.453.0/dist/umd/lucide.min.js"></script>
+<script>tailwind.config={theme:{extend:{colors:{bg:'#141316',ink:'#F3F4F6',muted:'#9CA3AF'},fontFamily:{sans:['Inter','system-ui','sans-serif']}}}}</script>
+</head>
+<body class="bg-bg text-ink font-sans min-h-screen flex items-center justify-center p-4"
+      style="background-image:radial-gradient(700px circle at 50% -5%,rgba(139,92,246,.35),transparent 60%),radial-gradient(600px circle at 100% 100%,rgba(59,130,246,.18),transparent 60%),radial-gradient(500px circle at 0% 80%,rgba(139,92,246,.12),transparent 60%)">
+<form method="post" class="p-8 rounded-3xl w-full max-w-sm border border-white/10 backdrop-blur-xl"
+      style="background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.02)),#1c1b22;box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 40px 80px -24px #000,0 0 80px -10px rgba(139,92,246,.45)">
+  <div class="w-14 h-14 rounded-2xl grid place-items-center mb-5"
+       style="background:linear-gradient(135deg,#7c3aed,#3b82f6);box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 14px 28px -8px rgba(124,58,237,.8)"><i data-lucide="gamepad-2" class="text-white w-6 h-6"></i></div>
+  <h1 class="text-2xl font-bold">MyrShop Admin</h1>
+  <p class="text-sm text-muted mb-6">Введите пароль для входа</p>
+  <input type="password" name="password" placeholder="Пароль" autofocus
+         class="w-full border border-gray-800 rounded-2xl px-4 py-3 mb-3 outline-none transition-all duration-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30 placeholder:text-gray-500"
+         style="background:#0f0e13;box-shadow:inset 0 2px 4px rgba(0,0,0,.6),0 1px 0 rgba(255,255,255,.04)">
+  {% if error %}<p class="text-rose-400 text-sm mb-3">{{ error }}</p>{% endif %}
+  <button class="w-full text-white font-semibold py-3 rounded-full transition-all duration-300 hover:-translate-y-0.5 hover:brightness-110 active:translate-y-px"
+          style="background:linear-gradient(135deg,#7c3aed,#3b82f6);box-shadow:inset 0 1px 0 rgba(255,255,255,.3),inset 0 -2px 0 rgba(0,0,0,.2),0 12px 28px -8px rgba(124,58,237,.8)">Войти</button>
 </form>
+<script>lucide.createIcons()</script>
 </body></html>

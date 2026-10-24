@@ -40,10 +40,10 @@
 {% endif %}
 
 <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 rise">
-  <div class="stat"><div class="label">Доступно</div><div class="num text-2xl">{{ p.balance }} ₽</div></div>
+  <div class="stat"><div class="label">Доступно</div><div class="num text-2xl num-grad">{{ p.balance }} ₽</div></div>
   <div class="stat"><div class="label">Заморожено</div><div class="num text-2xl text-warn">{{ p.frozen_balance }} ₽</div></div>
   <div class="stat stat-hot"><div class="label">Заработал</div><div class="num text-2xl text-accent glow-text">{{ p.total_earned }} ₽</div></div>
-  <div class="stat"><div class="label">Выплачено</div><div class="num text-2xl">{{ p.total_paid }} ₽</div></div>
+  <div class="stat"><div class="label">Выплачено</div><div class="num text-2xl num-grad">{{ p.total_paid }} ₽</div></div>
 </div>
 
 <div class="card mb-6 flex items-center justify-between gap-3 flex-wrap">
