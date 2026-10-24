@@ -18,6 +18,7 @@ from database.models import Account, RentalHistory
 from database.session import async_session
 from services.funpay_service import FunPayService
 from services.notifications import notify_admin
+from services.partner_service import on_rental_started
 from web import notifications
 
 
@@ -93,21 +94,26 @@ async def funpay_watcher_loop(bot, funpay: FunPayService):
                     account.payment_invoice_id = None
                     account.reserved_at = None
 
-                    session.add(RentalHistory(
+                    rental = RentalHistory(
                         account_id=account.id,
                         buyer_id=None,
                         method="funpay",
                         amount=price,
                         hours=hours,
                         started_at=datetime.utcnow(),
-                    ))
-
+                    )
+                    session.add(rental)
+                    await session.flush()  # получаем rental.id
                     await session.commit()
+
+                    if account.partner_id:
+                        await on_rental_started(session, account, rental.id, price)
 
                     notifications.push(
                         "Новая аренда (FunPay)",
                         f"#{account.id} · {account.rank} · {hours}ч · {price:.0f} ₽",
                         level="success",
+                        category="partner" if account.partner_id else "general",
                     )
 
                     funpay_text = (
