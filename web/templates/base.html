@@ -61,7 +61,7 @@ tailwind.config = { theme: { extend: {
     .b-prem { @apply text-violet-300 border-violet-400/40 bg-violet-500/10; }
     .link { @apply text-accent hover:underline; }
     .num { @apply font-mono font-bold tracking-tight; }
-    .navlink { @apply px-3 py-1.5 rounded-lg text-sm text-muted hover:text-ink inline-flex items-center gap-2 transition; }
+    .navlink { @apply px-2.5 py-2 xl:py-1.5 rounded-lg text-sm text-muted hover:text-ink inline-flex items-center gap-2 transition; }
     .navlink:hover { background: linear-gradient(180deg,#343842,#2a2d35); box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 4px 10px -6px #000; }
   }
   @layer components {
@@ -78,6 +78,8 @@ tailwind.config = { theme: { extend: {
     .qa { @apply card card-hover block; }
     .avatar { @apply w-9 h-9 rounded-full grid place-items-center font-bold text-sm text-ink border border-line; background: linear-gradient(145deg,#4a4640,#2b2825); box-shadow: inset 0 1px 0 rgba(255,255,255,.15), 0 4px 10px -4px #000; }
   }
+  .nav-scroll { scrollbar-width: none; -ms-overflow-style: none; }
+  .nav-scroll::-webkit-scrollbar { display: none; }
   @keyframes rise { from { opacity:0; transform:translateY(10px) scale(.985) } to { opacity:1; transform:none } }
   .rise > * { animation: rise .4s cubic-bezier(.2,.8,.2,1) both; }
   .rise > *:nth-child(2){animation-delay:.05s} .rise > *:nth-child(3){animation-delay:.1s}
@@ -88,30 +90,30 @@ tailwind.config = { theme: { extend: {
 </head>
 <body class="bg-bg text-ink font-sans min-h-screen antialiased">
 <nav class="sticky top-0 z-40 backdrop-blur border-b border-line/70" style="background:linear-gradient(180deg,rgba(40,43,51,.96),rgba(28,25,23,.94));box-shadow:0 10px 28px -14px #000, inset 0 1px 0 rgba(255,255,255,.05)">
-  <div class="max-w-6xl mx-auto px-4 h-14 flex items-center gap-1 overflow-x-auto whitespace-nowrap">
+  <div class="max-w-7xl mx-auto px-4 h-14 flex items-center gap-0.5 overflow-x-auto whitespace-nowrap nav-scroll">
     <a href="/" class="flex items-center gap-2 font-bold mr-4 shrink-0">
       <span class="w-8 h-8 rounded-lg grid place-items-center" style="background:linear-gradient(180deg,#ff7a50,#d9441f);box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 6px 14px -4px rgba(242,91,58,.7)"><i data-lucide="gamepad-2" class="w-4 h-4 text-white"></i></span>
-      MyrShop
+      <span class="hidden sm:inline">MyrShop</span>
     </a>
-    <a href="/" class="navlink"><i data-lucide="layout-dashboard" class="w-4 h-4"></i>Дашборд</a>
-    <a href="/accounts" class="navlink"><i data-lucide="users" class="w-4 h-4"></i>Аккаунты</a>
-    <a href="/accounts/add" class="navlink"><i data-lucide="plus" class="w-4 h-4"></i>Добавить</a>
-    <a href="/partners" class="navlink"><i data-lucide="handshake" class="w-4 h-4"></i>Партнёры</a>
-    <a href="/password-change" class="navlink"><i data-lucide="key-round" class="w-4 h-4"></i>Пароли</a>
-    <a href="/notifications" class="navlink"><i data-lucide="bell" class="w-4 h-4"></i>Уведомления</a>
-    <a href="/export" class="navlink"><i data-lucide="upload" class="w-4 h-4"></i>Экспорт</a>
-    <a href="/settings" class="navlink"><i data-lucide="settings" class="w-4 h-4"></i>Настройки</a>
-    <a href="/logout" class="navlink ml-auto hover:!text-accent shrink-0"><i data-lucide="log-out" class="w-4 h-4"></i>Выйти</a>
+    <a href="/" title="Дашборд" class="navlink"><i data-lucide="layout-dashboard" class="w-4 h-4"></i><span class="hidden xl:inline">Дашборд</span></a>
+    <a href="/accounts" title="Аккаунты" class="navlink"><i data-lucide="users" class="w-4 h-4"></i><span class="hidden xl:inline">Аккаунты</span></a>
+    <a href="/accounts/add" title="Добавить" class="navlink"><i data-lucide="plus" class="w-4 h-4"></i><span class="hidden xl:inline">Добавить</span></a>
+    <a href="/partners" title="Партнёры" class="navlink"><i data-lucide="handshake" class="w-4 h-4"></i><span class="hidden xl:inline">Партнёры</span></a>
+    <a href="/password-change" title="Пароли" class="navlink"><i data-lucide="key-round" class="w-4 h-4"></i><span class="hidden xl:inline">Пароли</span></a>
+    <a href="/notifications" title="Уведомления" class="navlink"><i data-lucide="bell" class="w-4 h-4"></i><span class="hidden xl:inline">Уведомления</span></a>
+    <a href="/export" title="Экспорт" class="navlink"><i data-lucide="upload" class="w-4 h-4"></i><span class="hidden xl:inline">Экспорт</span></a>
+    <a href="/settings" title="Настройки" class="navlink"><i data-lucide="settings" class="w-4 h-4"></i><span class="hidden xl:inline">Настройки</span></a>
+    <a href="/logout" title="Выйти" class="navlink ml-auto hover:!text-accent shrink-0"><i data-lucide="log-out" class="w-4 h-4"></i><span class="hidden xl:inline">Выйти</span></a>
   </div>
 </nav>
 
 <div id="toasts" class="fixed top-16 right-4 left-4 sm:left-auto sm:w-80 space-y-2 z-50"></div>
 
-<main class="max-w-6xl mx-auto px-4 py-6 rise">
+<main class="max-w-7xl mx-auto px-4 py-6 rise">
   {% block content %}{% endblock %}
 </main>
 
-<footer class="max-w-6xl mx-auto px-4 pb-8 text-xs text-muted">MyrShop Admin</footer>
+<footer class="max-w-7xl mx-auto px-4 pb-8 text-xs text-muted">MyrShop Admin</footer>
 
 <script>
 lucide.createIcons();
