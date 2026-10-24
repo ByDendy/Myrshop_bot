@@ -11,6 +11,7 @@ from services.funpay_service import FunPayService
 from services.cryptobot_service import CryptoBotService
 from services.settings_service import get_setting
 from services.notifications import notify_admin
+from services.partner_service import on_rental_started # <--- ДОБАВЛЕНО
 from web import notifications
 from config import SUPPORT_USERNAME
 
@@ -202,15 +203,21 @@ async def handle_payment(
         account.reserved_at = None
         account.payment_invoice_id = None
 
-        session.add(RentalHistory(
+        rental = RentalHistory(
             account_id=account.id,
             buyer_id=callback.from_user.id,
             method="test",
             amount=price,
             hours=hours,
             started_at=datetime.utcnow(),
-        ))
+        )
+        session.add(rental)
+        await session.flush() # Получаем rental.id до коммита
         await session.commit()
+
+        # НАЧИСЛЯЕМ ПАРТНЁРУ
+        if account.partner_id:
+            await on_rental_started(session, account, rental.id, price)
 
         notifications.push("🧪 Тестовая аренда", f"#{account.id} · {account.rank} · {hours}ч", level="warning")
 
