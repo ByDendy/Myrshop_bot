@@ -1,83 +1,44 @@
 {% extends "base.html" %}
+{% from "_macros.html" import status_badge %}
 {% block content %}
-<div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+<div class="flex items-center justify-between mb-4 flex-wrap gap-3">
   <h1 class="text-2xl font-bold">Аккаунты</h1>
-  <div class="flex gap-2 text-sm">
-    <a href="/accounts" class="px-3 py-1.5 rounded {% if not owner_filter and not current_rank %}bg-slate-900 text-white{% else %}bg-white text-slate-700 hover:bg-slate-100{% endif %}">Все</a>
-    <a href="/accounts?owner=me" class="px-3 py-1.5 rounded {% if owner_filter == 'me' %}bg-slate-900 text-white{% else %}bg-white text-slate-700 hover:bg-slate-100{% endif %}">Мои</a>
-    <a href="/accounts?owner=partner" class="px-3 py-1.5 rounded {% if owner_filter == 'partner' %}bg-slate-900 text-white{% else %}bg-white text-slate-700 hover:bg-slate-100{% endif %}">🤝 Партнёрские</a>
+  <div class="seg">
+    <a href="/accounts" class="{% if not owner_filter and not current_rank %}on{% endif %}">Все</a>
+    <a href="/accounts?owner=me" class="{% if owner_filter == 'me' %}on{% endif %}">Мои</a>
+    <a href="/accounts?owner=partner" class="{% if owner_filter == 'partner' %}on{% endif %}"><i data-lucide="handshake" class="w-4 h-4"></i>Партнёрские</a>
   </div>
 </div>
 
 <form method="get" class="mb-4 flex gap-2 items-center">
   {% if owner_filter %}<input type="hidden" name="owner" value="{{ owner_filter }}">{% endif %}
-  <label class="text-sm">Ранг:</label>
-  <select name="rank" class="border rounded px-2 py-1 text-sm" onchange="this.form.submit()">
+  <label class="text-sm text-muted">Ранг:</label>
+  <select name="rank" class="input !w-auto !py-1.5" onchange="this.form.submit()">
     <option value="">Все</option>
-    {% for r in ranks %}
-      <option value="{{ r }}" {% if r == current_rank %}selected{% endif %}>{{ r }}</option>
-    {% endfor %}
+    {% for r in ranks %}<option value="{{ r }}" {% if r == current_rank %}selected{% endif %}>{{ r }}</option>{% endfor %}
   </select>
-  <a href="/accounts" class="text-sm text-slate-500 underline">сброс</a>
+  <a href="/accounts" class="text-sm text-muted hover:text-accent underline">сброс</a>
 </form>
 
-<div class="bg-white rounded-lg shadow overflow-hidden">
-<table class="w-full text-sm">
-  <thead class="bg-slate-200">
-    <tr>
-      <th class="px-3 py-2 text-left">#</th>
-      <th class="px-3 py-2 text-left">Фото</th>
-      <th class="px-3 py-2 text-left">Ранг</th>
-      <th class="px-3 py-2 text-left">Логин</th>
-      <th class="px-3 py-2 text-left">Владелец</th>
-      <th class="px-3 py-2 text-left">Статус</th>
-      <th class="px-3 py-2 text-right"></th>
-    </tr>
-  </thead>
+<div class="card p-0 overflow-hidden"><div class="overflow-x-auto">
+<table class="tbl">
+  <thead><tr><th>#</th><th>Фото</th><th>Ранг</th><th>Логин</th><th>Владелец</th><th>Статус</th><th></th></tr></thead>
   <tbody>
   {% for a in accounts %}
-    <tr class="border-t hover:bg-slate-50">
-      <td class="px-3 py-2">{{ a.id }}</td>
-      <td class="px-3 py-2">
-        {% if a.photo_id %}
-          <img src="/api/photo/{{ a.photo_id }}" class="w-10 h-10 rounded object-cover">
-        {% else %}
-          <div class="w-10 h-10 bg-slate-200 rounded"></div>
-        {% endif %}
-      </td>
-      <td class="px-3 py-2">
-        {{ a.rank }}
-        {% if a.tier == "premium" %}
-          <span class="ml-1 inline-block bg-purple-100 text-purple-700 text-xs px-2 py-0.5 rounded">💎 Premium</span>
-        {% endif %}
-      </td>
-      <td class="px-3 py-2 font-mono text-xs">{{ a.login }}</td>
-      <td class="px-3 py-2 text-xs">
-        {% if a.partner_id %}
-          <span class="bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded">🤝 Партнёр #{{ a.partner_id }}</span>
-        {% else %}
-          <span class="text-slate-400">я</span>
-        {% endif %}
-      </td>
-      <td class="px-3 py-2">
-        {% if a.status == "free" %}<span class="text-emerald-600 font-medium">🟢 свободен</span>
-        {% elif a.status == "reserved" %}<span class="text-amber-600 font-medium">🟡 бронь</span>
-        {% elif a.status == "rented" %}<span class="text-blue-600 font-medium">🟠 аренда</span>
-        {% elif a.status == "awaiting_password_change" %}<span class="text-rose-600 font-medium">🔑 сменить пароль</span>
-        {% elif a.status == "pending_approval" %}<span class="text-amber-600 font-medium">⏳ на проверке</span>
-        {% elif a.status == "rejected" %}<span class="text-rose-600 font-medium">❌ отклонён</span>
-        {% elif a.status == "awaiting_review" %}<span class="text-orange-600 font-medium">🔑 ждёт пароля</span>
-        {% elif a.status == "awaiting_approval" %}<span class="text-blue-600 font-medium">🔍 пароль</span>
-        {% endif %}
-      </td>
-      <td class="px-3 py-2 text-right">
-        <a href="/accounts/{{ a.id }}" class="text-blue-600 hover:underline text-xs">открыть</a>
-      </td>
+    <tr>
+      <td class="font-mono text-muted">{{ a.id }}</td>
+      <td>{% if a.photo_id %}<img src="/api/photo/{{ a.photo_id }}" class="w-10 h-10 rounded-lg object-cover border border-line shadow-[0_6px_12px_-4px_rgba(0,0,0,.8)]" loading="lazy">
+        {% else %}<div class="w-10 h-10 bg-bg border border-line rounded-lg grid place-items-center"><i data-lucide="image-off" class="w-4 h-4 text-muted"></i></div>{% endif %}</td>
+      <td class="font-semibold">{{ a.rank }}
+        {% if a.tier == "premium" %}<span class="badge b-prem ml-1"><i data-lucide="gem" class="w-3 h-3"></i>Premium</span>{% endif %}</td>
+      <td class="font-mono text-xs">{{ a.login }}</td>
+      <td>{% if a.partner_id %}<span class="badge b-partner"><i data-lucide="handshake" class="w-3 h-3"></i>Партнёр #{{ a.partner_id }}</span>{% else %}<span class="text-muted text-xs">я</span>{% endif %}</td>
+      <td>{{ status_badge(a.status) }}</td>
+      <td class="text-right"><a href="/accounts/{{ a.id }}" class="link inline-flex items-center gap-1 text-xs">открыть<i data-lucide="chevron-right" class="w-4 h-4"></i></a></td>
     </tr>
   {% else %}
-    <tr><td colspan="7" class="px-3 py-6 text-center text-slate-500">Пусто</td></tr>
+    <tr><td colspan="7" class="py-8 text-center text-muted">Пусто</td></tr>
   {% endfor %}
   </tbody>
-</table>
-</div>
+</table></div></div>
 {% endblock %}

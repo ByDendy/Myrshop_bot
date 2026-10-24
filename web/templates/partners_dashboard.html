@@ -1,91 +1,49 @@
 {% extends "base.html" %}
 {% block title %}Партнёры{% endblock %}
 {% block content %}
-<div class="flex items-center justify-between mb-6">
-  <h1 class="text-2xl font-bold">🤝 Партнёрская программа</h1>
+<div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+  <h1 class="text-2xl font-bold flex items-center gap-2"><i data-lucide="handshake" class="text-accent"></i>Партнёрская программа</h1>
   <div class="flex gap-2">
-    <a href="/partners/list" class="bg-slate-900 text-white px-4 py-2 rounded text-sm hover:bg-slate-700">
-      📋 Все партнёры
-    </a>
-    <a href="/partners/payouts" class="bg-emerald-600 text-white px-4 py-2 rounded text-sm hover:bg-emerald-700">
-      💰 Выплаты {% if pending_payouts %}<span class="bg-white text-emerald-600 px-1.5 rounded text-xs font-bold">{{ pending_payouts }}</span>{% endif %}
-    </a>
+    <a href="/partners/list" class="btn btn-ghost"><i data-lucide="list" class="w-4 h-4"></i>Все партнёры</a>
+    <a href="/partners/payouts" class="btn btn-ok"><i data-lucide="wallet" class="w-4 h-4"></i>Выплаты
+      {% if pending_payouts %}<span class="bg-white text-emerald-700 px-1.5 rounded text-xs font-bold font-mono">{{ pending_payouts }}</span>{% endif %}</a>
   </div>
 </div>
 
-<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-  <div class="bg-white rounded-lg p-4 shadow">
-    <div class="text-sm text-slate-500">Активных партнёров</div>
-    <div class="text-3xl font-bold">{{ partners_active }}</div>
-  </div>
-  <div class="bg-white rounded-lg p-4 shadow">
-    <div class="text-sm text-slate-500">Партнёрских аккаунтов</div>
-    <div class="text-3xl font-bold">{{ accounts_total }}</div>
-  </div>
-  <a href="/partners/approvals" class="bg-white rounded-lg p-4 shadow hover:bg-amber-50 transition">
-    <div class="text-sm text-slate-500">Ожидают модерации</div>
-    <div class="text-3xl font-bold text-amber-600">{{ pending_moderation }}</div>
-  </a>
-  <div class="bg-white rounded-lg p-4 shadow">
-    <div class="text-sm text-slate-500">Заработок партнёров (30д)</div>
-    <div class="text-3xl font-bold text-emerald-600">{{ revenue_30d }} ₽</div>
-  </div>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3 rise">
+  <div class="stat"><div class="flex justify-between items-start mb-2"><div class="label">Активных партнёров</div><span class="chip chip-mute"><i data-lucide="users" class="w-4 h-4"></i></span></div><div class="num text-3xl">{{ partners_active }}</div></div>
+  <div class="stat"><div class="flex justify-between items-start mb-2"><div class="label">Партнёрских аккаунтов</div><span class="chip chip-mute"><i data-lucide="layers" class="w-4 h-4"></i></span></div><div class="num text-3xl">{{ accounts_total }}</div></div>
+  <a href="/partners/approvals" class="stat block"><div class="flex justify-between items-start mb-2"><div class="label">Ожидают модерации</div><span class="chip chip-mute"><i data-lucide="hourglass" class="w-4 h-4 text-warn"></i></span></div><div class="num text-3xl text-warn">{{ pending_moderation }}</div></a>
+  <div class="stat stat-hot"><div class="flex justify-between items-start mb-2"><div class="label">Заработок партнёров (30д)</div><span class="chip"><i data-lucide="trending-up" class="w-4 h-4"></i></span></div><div class="num text-3xl text-accent glow-text">{{ revenue_30d }} ₽</div></div>
 </div>
 
-<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-  <div class="bg-white rounded-lg p-4 shadow">
-    <div class="text-sm text-slate-500">Доступно к выплате</div>
-    <div class="text-2xl font-bold">{{ total_balance }} ₽</div>
-  </div>
-  <div class="bg-white rounded-lg p-4 shadow">
-    <div class="text-sm text-slate-500">Заморожено (в арендах)</div>
-    <div class="text-2xl font-bold text-amber-600">{{ total_frozen }} ₽</div>
-  </div>
-  <div class="bg-white rounded-lg p-4 shadow">
-    <div class="text-sm text-slate-500">В запросах на выплату</div>
-    <div class="text-2xl font-bold text-blue-600">{{ pending_payout_amount }} ₽</div>
-  </div>
-  <div class="bg-white rounded-lg p-4 shadow">
-    <div class="text-sm text-slate-500">Выплачено (всё время)</div>
-    <div class="text-2xl font-bold">{{ total_paid }} ₽</div>
-  </div>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8 rise">
+  <div class="stat"><div class="label">Доступно к выплате</div><div class="num text-2xl">{{ total_balance }} ₽</div></div>
+  <div class="stat"><div class="label">Заморожено (в арендах)</div><div class="num text-2xl text-warn">{{ total_frozen }} ₽</div></div>
+  <div class="stat"><div class="label">В запросах на выплату</div><div class="num text-2xl text-sky-300">{{ pending_payout_amount }} ₽</div></div>
+  <div class="stat"><div class="label">Выплачено (всё время)</div><div class="num text-2xl">{{ total_paid }} ₽</div></div>
 </div>
 
-<h2 class="text-lg font-bold mb-3">⚡ Быстрые действия</h2>
-<div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8">
-  <a href="/partners/approvals" class="bg-amber-50 border border-amber-200 rounded-lg p-4 hover:bg-amber-100 transition">
-    <div class="font-bold text-amber-800">⏳ Ожидают одобрения</div>
-    <div class="text-sm text-amber-600 mt-1">Новые аккаунты от партнёров</div>
-  </a>
-  <a href="/partners/passwords" class="bg-blue-50 border border-blue-200 rounded-lg p-4 hover:bg-blue-100 transition">
-    <div class="font-bold text-blue-800">🔍 Проверить пароли</div>
-    <div class="text-sm text-blue-600 mt-1">Партнёры ввели новые пароли</div>
-  </a>
-  <a href="/partners/payouts" class="bg-emerald-50 border border-emerald-200 rounded-lg p-4 hover:bg-emerald-100 transition">
-    <div class="font-bold text-emerald-800">💰 Запросы на выплату</div>
-    <div class="text-sm text-emerald-600 mt-1">Ожидают перевода</div>
-  </a>
+<h2 class="text-lg font-semibold mb-3 flex items-center gap-2"><i data-lucide="zap" class="w-5 h-5 text-accent"></i>Быстрые действия</h2>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8 rise">
+  <a href="/partners/approvals" class="qa"><div class="flex items-center gap-3"><span class="chip chip-mute"><i data-lucide="hourglass" class="w-4 h-4 text-warn"></i></span>
+    <div><div class="font-semibold">Ожидают одобрения</div><div class="text-sm text-muted">Новые аккаунты от партнёров</div></div></div></a>
+  <a href="/partners/passwords" class="qa"><div class="flex items-center gap-3"><span class="chip chip-mute"><i data-lucide="search-check" class="w-4 h-4 text-sky-300"></i></span>
+    <div><div class="font-semibold">Проверить пароли</div><div class="text-sm text-muted">Партнёры ввели новые пароли</div></div></div></a>
+  <a href="/partners/payouts" class="qa"><div class="flex items-center gap-3"><span class="chip chip-mute"><i data-lucide="wallet" class="w-4 h-4 text-ok"></i></span>
+    <div><div class="font-semibold">Запросы на выплату</div><div class="text-sm text-muted">Ожидают перевода</div></div></div></a>
 </div>
 
-<h2 class="text-lg font-bold mb-3">📊 Последние события</h2>
-<div class="bg-white rounded-lg shadow overflow-hidden">
-<table class="w-full text-sm">
-  <thead class="bg-slate-200">
-    <tr>
-      <th class="px-3 py-2 text-left">Событие</th>
-      <th class="px-3 py-2 text-left">Дата</th>
-    </tr>
-  </thead>
+<h2 class="text-lg font-semibold mb-3 flex items-center gap-2"><i data-lucide="activity" class="w-5 h-5 text-accent"></i>Последние события</h2>
+<div class="card p-0 overflow-hidden"><div class="overflow-x-auto">
+<table class="tbl">
+  <thead><tr><th>Событие</th><th>Дата</th></tr></thead>
   <tbody>
   {% for e in recent_events %}
-    <tr class="border-t">
-      <td class="px-3 py-2">{{ e.event }}</td>
-      <td class="px-3 py-2 text-xs text-slate-500">{{ e.ts }}</td>
-    </tr>
+    <tr><td class="!whitespace-normal">{{ e.event }}</td><td class="font-mono text-xs text-muted">{{ e.ts }}</td></tr>
   {% else %}
-    <tr><td colspan="2" class="px-3 py-6 text-center text-slate-500">Пока нет событий</td></tr>
+    <tr><td colspan="2" class="py-8 text-center text-muted">Пока нет событий</td></tr>
   {% endfor %}
   </tbody>
-</table>
-</div>
+</table></div></div>
 {% endblock %}

@@ -1,0 +1,11 @@
+{% macro status_badge(s) -%}
+{% if s == 'free' %}<span class="badge b-free"><i data-lucide="check-circle-2" class="w-3 h-3"></i>свободен</span>
+{% elif s == 'reserved' %}<span class="badge b-res"><i data-lucide="clock" class="w-3 h-3"></i>бронь</span>
+{% elif s == 'rented' %}<span class="badge b-rent"><i data-lucide="flame" class="w-3 h-3"></i>аренда</span>
+{% elif s == 'awaiting_password_change' %}<span class="badge b-pw"><i data-lucide="key-round" class="w-3 h-3"></i>сменить пароль</span>
+{% elif s == 'pending_approval' %}<span class="badge b-res"><i data-lucide="hourglass" class="w-3 h-3"></i>на проверке</span>
+{% elif s == 'rejected' %}<span class="badge b-pw"><i data-lucide="x-circle" class="w-3 h-3"></i>отклонён</span>
+{% elif s == 'awaiting_review' %}<span class="badge b-rent"><i data-lucide="key-round" class="w-3 h-3"></i>ждёт пароля</span>
+{% elif s == 'awaiting_approval' %}<span class="badge b-blue"><i data-lucide="search" class="w-3 h-3"></i>пароль</span>
+{% endif %}
+{%- endmacro %}

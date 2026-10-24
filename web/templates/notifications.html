@@ -1,37 +1,35 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="flex items-center justify-between mb-4 flex-wrap gap-2">
-  <h1 class="text-2xl font-bold">🔔 История уведомлений</h1>
-  <div class="flex gap-2 text-sm">
-    <a href="/notifications?cat=all" class="px-3 py-1.5 rounded {% if cat == 'all' or not cat %}bg-slate-900 text-white{% else %}bg-white text-slate-700 hover:bg-slate-100{% endif %}">Все</a>
-    <a href="/notifications?cat=general" class="px-3 py-1.5 rounded {% if cat == 'general' %}bg-slate-900 text-white{% else %}bg-white text-slate-700 hover:bg-slate-100{% endif %}">Мои</a>
-    <a href="/notifications?cat=partner" class="px-3 py-1.5 rounded {% if cat == 'partner' %}bg-slate-900 text-white{% else %}bg-white text-slate-700 hover:bg-slate-100{% endif %}">🤝 Партнёрские</a>
+<div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+  <h1 class="text-2xl font-bold flex items-center gap-2"><i data-lucide="bell" class="text-accent"></i>История уведомлений</h1>
+  <div class="seg">
+    <a href="/notifications?cat=all" class="{% if cat == 'all' or not cat %}on{% endif %}">Все</a>
+    <a href="/notifications?cat=general" class="{% if cat == 'general' %}on{% endif %}">Мои</a>
+    <a href="/notifications?cat=partner" class="{% if cat == 'partner' %}on{% endif %}"><i data-lucide="handshake" class="w-4 h-4"></i>Партнёрские</a>
   </div>
 </div>
 
-<div class="bg-white rounded-lg shadow overflow-hidden">
+<div class="card p-0 overflow-hidden">
   {% if not events %}
-    <div class="p-6 text-center text-slate-500">Уведомлений пока нет.</div>
+    <div class="p-8 text-center text-muted">Уведомлений пока нет.</div>
   {% else %}
-    <div class="divide-y divide-slate-100">
+    <div class="divide-y divide-line/50">
       {% for e in events %}
-        <div class="p-4 flex items-start gap-4 hover:bg-slate-50 transition-colors">
-          <div class="mt-1">
-            {% if e.level == 'success' %}<span class="text-emerald-500 text-xl">✅</span>
-            {% elif e.level == 'warning' %}<span class="text-amber-500 text-xl">⚠️</span>
-            {% elif e.level == 'danger' %}<span class="text-rose-500 text-xl">🚨</span>
-            {% else %}<span class="text-slate-400 text-xl">ℹ️</span>{% endif %}
+        <div class="p-4 flex items-start gap-3 sm:gap-4 hover:bg-accent/5 transition-colors border-l-4
+          {% if e.level == 'success' %}border-ok{% elif e.level == 'warning' %}border-accent{% elif e.level == 'danger' %}border-bad{% else %}border-line{% endif %}">
+          <div class="mt-0.5 shrink-0">
+            {% if e.level == 'success' %}<i data-lucide="check-circle-2" class="w-5 h-5 text-ok"></i>
+            {% elif e.level == 'warning' %}<i data-lucide="alert-triangle" class="w-5 h-5 text-accent"></i>
+            {% elif e.level == 'danger' %}<i data-lucide="siren" class="w-5 h-5 text-bad"></i>
+            {% else %}<i data-lucide="info" class="w-5 h-5 text-muted"></i>{% endif %}
           </div>
-          <div class="flex-1">
-            <div class="font-bold text-slate-800">
-              {{ e.title }}
-              {% if e.category == 'partner' %}
-                <span class="bg-indigo-100 text-indigo-800 text-xs px-2 py-0.5 rounded ml-2">партнёр</span>
-              {% endif %}
+          <div class="flex-1 min-w-0">
+            <div class="font-semibold flex items-center gap-2 flex-wrap">{{ e.title }}
+              {% if e.category == 'partner' %}<span class="badge b-partner"><i data-lucide="handshake" class="w-3 h-3"></i>партнёр</span>{% endif %}
             </div>
-            {% if e.text %}<div class="text-sm text-slate-600 mt-0.5">{{ e.text }}</div>{% endif %}
+            {% if e.text %}<div class="text-sm text-muted mt-0.5 break-words">{{ e.text }}</div>{% endif %}
           </div>
-          <div class="text-xs text-slate-400 whitespace-nowrap">{{ e.ts }}</div>
+          <div class="text-xs font-mono text-muted whitespace-nowrap">{{ e.ts }}</div>
         </div>
       {% endfor %}
     </div>
