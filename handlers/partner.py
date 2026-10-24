@@ -1,19 +1,21 @@
 import logging
 from datetime import datetime
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from sqlalchemy import select, func
 
 from database.models import (
     Account, Partner, RankSetting, RentalHistory,
+    PartnerEarning, PartnerPayout,
 )
 from database.session import async_session
 from keyboards.inline import (
     partner_not_registered_keyboard, partner_main_menu,
     partner_accounts_keyboard, partner_back_to_main,
 )
+from services.partner_service import request_payout
 from config import ADMIN_IDS
 
 router = Router()
@@ -32,13 +34,15 @@ class EditPaymentDetails(StatesGroup):
     wait_text = State()
 
 
+class ChangePassword(StatesGroup):
+    new_password = State()
+
+
 async def _get_partner(session, telegram_id: int):
     return (await session.execute(
         select(Partner).where(Partner.telegram_id == telegram_id)
     )).scalar_one_or_none()
 
-
-# ─── Вход в раздел ───
 
 @router.callback_query(F.data == "partner_main")
 async def partner_main(callback: CallbackQuery, session):
@@ -47,15 +51,15 @@ async def partner_main(callback: CallbackQuery, session):
     if not partner:
         await callback.message.delete()
         await callback.message.answer(
-            "🤝 **Партнёрская программа MyrShop**\n\n"
+            "🤝 *Партнёрская программа MyrShop*\n\n"
             "Сдавай свои аккаунты Valorant в аренду через нашу платформу "
-            "и получай **90%** с каждой аренды.\n\n"
-            "**Что ты получаешь:**\n"
+            "и получай *90%* с каждой аренды.\n\n"
+            "*Что ты получаешь:*\n"
             "• Автоматизация оплат и выдачи\n"
             "• Трафик покупателей\n"
             "• Прозрачная статистика и история начислений\n"
             "• Выплаты по запросу\n\n"
-            "**Что нужно:**\n"
+            "*Что нужно:*\n"
             "• Свои аккаунты Valorant (Standard или Premium)\n"
             "• Менять пароль после каждой аренды (5 минут)\n\n"
             "Нажми кнопку ниже, чтобы присоединиться.",
@@ -74,9 +78,9 @@ async def partner_main(callback: CallbackQuery, session):
 
     await callback.message.delete()
     await callback.message.answer(
-        f"🤝 **Кабинет партнёра**\n\n"
+        f"🤝 *Кабинет партнёра*\n\n"
         f"Привет, {callback.from_user.first_name}!\n"
-        f"Твой процент: **{100 - (partner.commission_percent or 10):.0f}%** "
+        f"Твой процент: *{100 - (partner.commission_percent or 10):.0f}%* "
         f"с каждой аренды.",
         parse_mode="Markdown",
         reply_markup=partner_main_menu(partner),
@@ -102,14 +106,10 @@ async def partner_register(callback: CallbackQuery, session):
     await callback.message.delete()
     await callback.message.answer(
         f"🎉 Добро пожаловать в партнёрскую программу!\n\n"
-        f"Теперь ты можешь добавлять свои аккаунты и получать 90% с каждой аренды.\n\n"
-        f"Твой процент: **90%** (платформа берёт 10%).",
-        parse_mode="Markdown",
+        f"Теперь ты можешь добавлять свои аккаунты и получать 90% с каждой аренды.",
         reply_markup=partner_main_menu(partner),
     )
 
-
-# ─── Профиль ───
 
 @router.callback_query(F.data == "partner_profile")
 async def partner_profile(callback: CallbackQuery, session):
@@ -118,7 +118,6 @@ async def partner_profile(callback: CallbackQuery, session):
         await callback.answer("Сначала стань партнёром", show_alert=True)
         return
 
-    # Статистика по аккаунтам
     accs = (await session.execute(
         select(Account).where(Account.partner_id == partner.id)
     )).scalars().all()
@@ -129,7 +128,7 @@ async def partner_profile(callback: CallbackQuery, session):
     pending = sum(1 for a in accs if a.status == "pending_approval")
     awaiting = sum(1 for a in accs if a.status in ("awaiting_review", "awaiting_approval"))
 
-    # Аренды и заработок
+    rental_count = 0
     if accs:
         acc_ids = [a.id for a in accs]
         rental_count = (await session.execute(
@@ -137,25 +136,32 @@ async def partner_profile(callback: CallbackQuery, session):
                 RentalHistory.account_id.in_(acc_ids)
             )
         )).scalar() or 0
-    else:
-        rental_count = 0
+
+    # Активные запросы на выплату
+    pending_payout = (await session.execute(
+        select(func.coalesce(func.sum(PartnerPayout.amount), 0)).where(
+            PartnerPayout.partner_id == partner.id,
+            PartnerPayout.status == "requested",
+        )
+    )).scalar() or 0
 
     text = (
-        f"📊 **Профиль партнёра**\n\n"
+        f"📊 *Профиль партнёра*\n\n"
         f"👤 {partner.full_name or 'Партнёр'}"
         f"{' (@' + partner.username + ')' if partner.username else ''}\n"
         f"📅 С нами с {partner.created_at.strftime('%d.%m.%Y')}\n\n"
-        f"**Аккаунты:**\n"
+        f"*Аккаунты:*\n"
         f"• Всего: {total_accounts}\n"
         f"• 🟢 Свободных: {free}\n"
         f"• 🟠 В аренде: {rented}\n"
         f"• 🟡 На проверке: {pending}\n"
         f"• ⏳ Ждут пароля: {awaiting}\n\n"
-        f"**Финансы:**\n"
+        f"*Финансы:*\n"
         f"• Всего аренд: {rental_count}\n"
-        f"• Заработано всего: **{partner.total_earned or 0:.0f} ₽**\n"
-        f"• Доступно к выводу: **{partner.balance or 0:.0f} ₽**\n"
-        f"• Заморожено: {partner.frozen_balance or 0:.0f} ₽\n"
+        f"• Заработано всего: *{partner.total_earned or 0:.0f} ₽*\n"
+        f"• Доступно к выводу: *{partner.balance or 0:.0f} ₽*\n"
+        f"• Заморожено (в арендах): {partner.frozen_balance or 0:.0f} ₽\n"
+        f"• В ожидании выплаты: {pending_payout:.0f} ₽\n"
         f"• Выплачено: {partner.total_paid or 0:.0f} ₽"
     )
 
@@ -164,8 +170,6 @@ async def partner_profile(callback: CallbackQuery, session):
         reply_markup=partner_back_to_main(),
     )
 
-
-# ─── Мои аккаунты ───
 
 @router.callback_query(F.data == "partner_accounts")
 async def partner_accounts(callback: CallbackQuery, session):
@@ -198,27 +202,123 @@ async def partner_accounts(callback: CallbackQuery, session):
         "awaiting_approval": "🔍 Пароль на проверке",
     }
 
-    text = f"📁 **Твои аккаунты ({len(accounts)})**\n\n"
+    text = f"📁 *Твои аккаунты ({len(accounts)})*\n\n"
     for acc in accounts:
         label = status_labels.get(acc.status, "❓")
         text += f"#{acc.id} · {acc.rank} — {label}\n"
         if acc.status == "rejected" and acc.reject_reason:
             text += f"   ⚠️ {acc.reject_reason}\n"
-        if acc.status == "awaiting_review":
-            text += f"   ⚠️ Смени пароль и отправь через «Сменить пароль»\n"
+
+    # Кнопки: удалить (если free) и сменить пароль (если awaiting_review)
+    buttons = []
+    for acc in accounts:
+        if acc.status == "free":
+            buttons.append([InlineKeyboardButton(
+                text=f"🗑 Удалить #{acc.id} — {acc.rank}",
+                callback_data=f"partner_del|{acc.id}",
+            )])
+        elif acc.status == "awaiting_review":
+            buttons.append([InlineKeyboardButton(
+                text=f"🔑 Сменить пароль #{acc.id}",
+                callback_data=f"partner_chpw|{acc.id}",
+            )])
+    buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="partner_main")])
 
     await callback.message.edit_text(
         text, parse_mode="Markdown",
-        reply_markup=partner_accounts_keyboard(accounts),
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
     )
+
+
+@router.callback_query(F.data.startswith("partner_chpw|"))
+async def partner_change_password_start(callback: CallbackQuery, state: FSMContext, session):
+    acc_id = int(callback.data.split("|")[1])
+    partner = await _get_partner(session, callback.from_user.id)
+    account = await session.get(Account, acc_id)
+
+    if not account or not partner or account.partner_id != partner.id:
+        await callback.answer("Аккаунт не найден", show_alert=True)
+        return
+
+    if account.status != "awaiting_review":
+        await callback.answer(
+            f"Сменить пароль можно только для аккаунтов в статусе «Ждёт смены пароля». "
+            f"Сейчас: {account.status}",
+            show_alert=True,
+        )
+        return
+
+    await state.set_state(ChangePassword.new_password)
+    await state.update_data(acc_id=acc_id)
+    await callback.message.delete()
+    await callback.message.answer(
+        f"🔑 *Смена пароля для #{acc_id}* ({account.rank})\n\n"
+        f"Зайди в аккаунт Riot Games, смени пароль на новый, "
+        f"и пришли его сюда.\n\n"
+        f"После этого админ проверит и вернёт аккаунт в магазин.",
+        parse_mode="Markdown",
+    )
+
+
+@router.message(ChangePassword.new_password)
+async def partner_change_password_save(message: Message, state: FSMContext, session):
+    data = await state.get_data()
+    acc_id = data["acc_id"]
+    new_password = (message.text or "").strip()
+
+    if len(new_password) < 6:
+        await message.answer("❌ Пароль слишком короткий (минимум 6 символов). Попробуй снова:")
+        return
+
+    partner = await _get_partner(session, message.from_user.id)
+    account = await session.get(Account, acc_id)
+
+    if not account or not partner or account.partner_id != partner.id:
+        await message.answer("❌ Аккаунт не найден.")
+        await state.clear()
+        return
+
+    if account.status != "awaiting_review":
+        await message.answer(f"❌ Аккаунт уже не ждёт смены пароля (сейчас: {account.status}).")
+        await state.clear()
+        return
+
+    account.password = new_password
+    account.status = "awaiting_approval"
+    account.password_changed_at = datetime.utcnow()
+    await session.commit()
+    await state.clear()
+
+    await message.answer(
+        f"✅ Пароль отправлен на проверку.\n\n"
+        f"Как только админ подтвердит — аккаунт вернётся в магазин.",
+        reply_markup=partner_back_to_main(),
+    )
+
+    # Уведомление админу
+    admin_text = (
+        f"🔑 *Пароль от партнёра на проверку*\n\n"
+        f"Партнёр: {partner.full_name or 'без имени'}"
+        f"{' (@' + partner.username + ')' if partner.username else ''}\n"
+        f"Аккаунт #{account.id} · {account.rank}\n"
+        f"Логин: `{account.login}`\n"
+        f"Новый пароль: `{new_password}`\n\n"
+        f"Проверить: /admin → Пароли или веб-панель → 🤝 Партнёры → 🔍 Пароли"
+    )
+    for admin_id in ADMIN_IDS:
+        try:
+            await message.bot.send_message(admin_id, admin_text, parse_mode="Markdown")
+        except Exception as e:
+            logging.warning(f"Не смог уведомить админа {admin_id}: {e}")
 
 
 @router.callback_query(F.data.startswith("partner_del|"))
 async def partner_delete_account(callback: CallbackQuery, session):
     acc_id = int(callback.data.split("|")[1])
+    partner = await _get_partner(session, callback.from_user.id)
     account = await session.get(Account, acc_id)
 
-    if not account or account.partner_id != (await _get_partner(session, callback.from_user.id)).id:
+    if not account or not partner or account.partner_id != partner.id:
         await callback.answer("Аккаунт не найден", show_alert=True)
         return
 
@@ -245,21 +345,18 @@ async def partner_add_start(callback: CallbackQuery, state: FSMContext, session)
         await callback.answer("Сначала стань партнёром", show_alert=True)
         return
 
-    # Проверяем, что настроены ранги
     ranks = (await session.execute(select(RankSetting))).scalars().all()
     if not ranks:
         await callback.message.delete()
         await callback.message.answer(
-            "⚠️ Ранги ещё не настроены администратором.\n"
-            "Пожалуйста, свяжитесь с поддержкой."
+            "⚠️ Ранги ещё не настроены администратором. Свяжитесь с поддержкой."
         )
         return
 
     await state.set_state(AddPartnerAccount.login)
     await callback.message.delete()
     await callback.message.answer(
-        "➕ **Добавление аккаунта**\n\n"
-        "Шаг 1/6: Введи **логин** Riot Games:",
+        "➕ *Добавление аккаунта*\n\nШаг 1/6: Введи *логин* Riot Games:",
         parse_mode="Markdown",
     )
 
@@ -268,23 +365,23 @@ async def partner_add_start(callback: CallbackQuery, state: FSMContext, session)
 async def add_login(message: Message, state: FSMContext):
     login = (message.text or "").strip()
     if len(login) < 3:
-        await message.answer("❌ Логин слишком короткий (минимум 3 символа). Попробуй снова:")
+        await message.answer("❌ Логин слишком короткий. Попробуй снова:")
         return
     await state.update_data(login=login)
     await state.set_state(AddPartnerAccount.password)
-    await message.answer("Шаг 2/6: Введи **пароль** от Riot Games:", parse_mode="Markdown")
+    await message.answer("Шаг 2/6: Введи *пароль* от Riot Games:", parse_mode="Markdown")
 
 
 @router.message(AddPartnerAccount.password)
 async def add_password(message: Message, state: FSMContext):
     pwd = (message.text or "").strip()
     if len(pwd) < 6:
-        await message.answer("❌ Пароль слишком короткий (минимум 6 символов). Попробуй снова:")
+        await message.answer("❌ Пароль слишком короткий. Попробуй снова:")
         return
     await state.update_data(password=pwd)
     await state.set_state(AddPartnerAccount.riot_id)
     await message.answer(
-        "Шаг 3/6: Введи **Riot ID** (например, `Player#RU1`):",
+        "Шаг 3/6: Введи *Riot ID* (например, `Player#RU1`):",
         parse_mode="Markdown",
     )
 
@@ -298,7 +395,7 @@ async def add_riot_id(message: Message, state: FSMContext):
     await state.update_data(riot_id=riot_id)
     await state.set_state(AddPartnerAccount.rank)
     await message.answer(
-        "Шаг 4/6: Введи **ранг** (например, `Diamond 1`):",
+        "Шаг 4/6: Введи *ранг* (например, `Diamond 1`):",
         parse_mode="Markdown",
     )
 
@@ -307,7 +404,6 @@ async def add_riot_id(message: Message, state: FSMContext):
 async def add_rank(message: Message, state: FSMContext, session):
     rank = (message.text or "").strip()
 
-    # Проверяем, что ранг существует в RankSetting (регистронезависимо)
     rank_setting = (await session.execute(
         select(RankSetting).where(func.lower(RankSetting.rank) == rank.lower())
     )).scalar_one_or_none()
@@ -316,10 +412,9 @@ async def add_rank(message: Message, state: FSMContext, session):
         available = (await session.execute(
             select(RankSetting.rank).order_by(RankSetting.rank)
         )).scalars().all()
-        avail_str = ", ".join(available)
         await message.answer(
             f"❌ Ранг `{rank}` не настроен.\n\n"
-            f"Доступные ранги:\n{avail_str}\n\n"
+            f"Доступные ранги: {', '.join(available)}\n\n"
             f"Попробуй снова:",
             parse_mode="Markdown",
         )
@@ -329,11 +424,11 @@ async def add_rank(message: Message, state: FSMContext, session):
     await state.set_state(AddPartnerAccount.prices)
 
     await message.answer(
-        f"Шаг 5/6: Введи **три цены** через пробел — за 3ч, 6ч и 12ч.\n\n"
-        f"Минимумы для ранга `{rank_setting.rank}`:\n"
-        f"• 3ч: не ниже **{rank_setting.min_price_3h:.0f} ₽**\n"
-        f"• 6ч: не ниже **{rank_setting.min_price_6h:.0f} ₽**\n"
-        f"• 12ч: не ниже **{rank_setting.min_price_12h:.0f} ₽**\n\n"
+        f"Шаг 5/6: Введи *три цены* через пробел — за 3ч, 6ч и 12ч.\n\n"
+        f"Минимумы для `{rank_setting.rank}`:\n"
+        f"• 3ч: ≥ *{rank_setting.min_price_3h:.0f} ₽*\n"
+        f"• 6ч: ≥ *{rank_setting.min_price_6h:.0f} ₽*\n"
+        f"• 12ч: ≥ *{rank_setting.min_price_12h:.0f} ₽*\n\n"
         f"Пример: `{rank_setting.min_price_3h:.0f} {rank_setting.min_price_6h:.0f} {rank_setting.min_price_12h:.0f}`",
         parse_mode="Markdown",
     )
@@ -350,7 +445,7 @@ async def add_prices(message: Message, state: FSMContext, session):
 
     parts = (message.text or "").replace(",", ".").split()
     if len(parts) != 3:
-        await message.answer("❌ Нужно ровно три числа через пробел. Пример: `200 350 600`")
+        await message.answer("❌ Нужно ровно три числа. Пример: `200 350 600`")
         return
 
     try:
@@ -359,35 +454,23 @@ async def add_prices(message: Message, state: FSMContext, session):
         await message.answer("❌ Введи числа. Пример: `200 350 600`")
         return
 
-    # Проверки
     if p3 < rank_setting.min_price_3h:
-        await message.answer(
-            f"❌ Цена за 3ч ({p3:.0f}₽) ниже минимума ({rank_setting.min_price_3h:.0f}₽). "
-            f"Попробуй снова:"
-        )
+        await message.answer(f"❌ 3ч ({p3:.0f}₽) ниже минимума ({rank_setting.min_price_3h:.0f}₽). Попробуй снова:")
         return
     if p6 < rank_setting.min_price_6h:
-        await message.answer(
-            f"❌ Цена за 6ч ({p6:.0f}₽) ниже минимума ({rank_setting.min_price_6h:.0f}₽). "
-            f"Попробуй снова:"
-        )
+        await message.answer(f"❌ 6ч ({p6:.0f}₽) ниже минимума ({rank_setting.min_price_6h:.0f}₽). Попробуй снова:")
         return
     if p12 < rank_setting.min_price_12h:
-        await message.answer(
-            f"❌ Цена за 12ч ({p12:.0f}₽) ниже минимума ({rank_setting.min_price_12h:.0f}₽). "
-            f"Попробуй снова:"
-        )
+        await message.answer(f"❌ 12ч ({p12:.0f}₽) ниже минимума ({rank_setting.min_price_12h:.0f}₽). Попробуй снова:")
         return
     if not (p3 <= p6 <= p12):
-        await message.answer(
-            "❌ Цены должны расти: 3ч ≤ 6ч ≤ 12ч. Попробуй снова:"
-        )
+        await message.answer("❌ Цены должны расти: 3ч ≤ 6ч ≤ 12ч. Попробуй снова:")
         return
 
     await state.update_data(price_3h=p3, price_6h=p6, price_12h=p12)
     await state.set_state(AddPartnerAccount.photo)
     await message.answer(
-        "Шаг 6/6: Отправь **фото аккаунта** (скриншот инвентаря / ранга).\n\n"
+        "Шаг 6/6: Отправь *фото аккаунта* (скриншот инвентаря / ранга).\n\n"
         "Или напиши «нет», чтобы пропустить.",
         parse_mode="Markdown",
     )
@@ -404,7 +487,6 @@ async def add_photo(message: Message, state: FSMContext, session):
         await state.clear()
         return
 
-    # Проверка на дубликат логина
     existing = (await session.execute(
         select(Account).where(Account.login == data["login"])
     )).scalar_one_or_none()
@@ -436,23 +518,19 @@ async def add_photo(message: Message, state: FSMContext, session):
     await state.clear()
 
     await message.answer(
-        f"✅ Аккаунт **#{account.id}** отправлен на проверку!\n\n"
-        f"Обычно это занимает до 24 часов. Мы уведомим тебя, когда админ одобрит аккаунт.",
+        f"✅ Аккаунт *#{account.id}* отправлен на проверку!",
         parse_mode="Markdown",
         reply_markup=partner_back_to_main(),
     )
 
-    # Уведомление админам
     admin_text = (
-        f"🤝 **Новая заявка на партнёрский аккаунт**\n\n"
+        f"🤝 *Новая заявка на партнёрский аккаунт*\n\n"
         f"Партнёр: {partner.full_name or 'без имени'}"
         f"{' (@' + partner.username + ')' if partner.username else ''}\n"
         f"TG ID: `{partner.telegram_id}`\n\n"
         f"Аккаунт #{account.id}\n"
-        f"Ранг: **{account.rank}**\n"
-        f"Riot ID: `{account.riot_id}`\n"
-        f"Цены: 3ч {account.price_3h:.0f}₽ / 6ч {account.price_6h:.0f}₽ / 12ч {account.price_12h:.0f}₽\n\n"
-        f"Проверить и одобрить: /admin → Аккаунты"
+        f"Ранг: *{account.rank}*\n"
+        f"Цены: 3ч {account.price_3h:.0f}₽ / 6ч {account.price_6h:.0f}₽ / 12ч {account.price_12h:.0f}₽"
     )
     for admin_id in ADMIN_IDS:
         try:
@@ -472,20 +550,14 @@ async def partner_details(callback: CallbackQuery, session):
 
     current = partner.payment_details or "не указаны"
     await callback.message.edit_text(
-        f"💳 **Реквизиты для выплат**\n\n"
+        f"💳 *Реквизиты для выплат*\n\n"
         f"Текущие: `{current}`\n\n"
         f"Нажми «Изменить», чтобы обновить (карта, USDT-кошелёк, СБП и т.д.).",
         parse_mode="Markdown",
-        reply_markup=__import__("aiogram").types.InlineKeyboardMarkup(
-            inline_keyboard=[
-                [__import__("aiogram").types.InlineKeyboardButton(
-                    text="✏️ Изменить", callback_data="partner_details_edit"
-                )],
-                [__import__("aiogram").types.InlineKeyboardButton(
-                    text="◀️ Назад", callback_data="partner_main"
-                )],
-            ]
-        ),
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="✏️ Изменить", callback_data="partner_details_edit")],
+            [InlineKeyboardButton(text="◀️ Назад", callback_data="partner_main")],
+        ]),
     )
 
 
@@ -518,7 +590,7 @@ async def partner_details_save(message: Message, state: FSMContext, session):
     )
 
 
-# ─── Запрос выплаты (заглушка до Этапа 4) ───
+# ─── Реальный запрос выплаты ───
 
 @router.callback_query(F.data == "partner_payout")
 async def partner_payout(callback: CallbackQuery, session):
@@ -527,16 +599,34 @@ async def partner_payout(callback: CallbackQuery, session):
         await callback.answer("Сначала стань партнёром", show_alert=True)
         return
 
-    if (partner.balance or 0) < 300:
-        await callback.answer(
-            f"Минимальная сумма для выплаты — 300₽.\n"
-            f"Сейчас у тебя: {partner.balance or 0:.0f}₽",
-            show_alert=True,
-        )
+    payout, error = await request_payout(session, partner)
+
+    if error:
+        await callback.answer(error, show_alert=True)
         return
 
-    await callback.answer(
-        "Функция выплат будет доступна после полного запуска программы. "
-        "Пока что администратор свяжется с тобой для выплаты.",
-        show_alert=True,
+    # Уведомление админам
+    admin_text = (
+        f"💰 *Запрос на выплату*\n\n"
+        f"Партнёр: {partner.full_name or 'без имени'}"
+        f"{' (@' + partner.username + ')' if partner.username else ''}\n"
+        f"TG ID: `{partner.telegram_id}`\n\n"
+        f"Сумма: *{payout.amount:.0f} ₽*\n"
+        f"Реквизиты: {partner.payment_details}\n\n"
+        f"Обработать: веб-панель → 🤝 Партнёры → 💰 Выплаты"
+    )
+    for admin_id in ADMIN_IDS:
+        try:
+            await callback.bot.send_message(admin_id, admin_text, parse_mode="Markdown")
+        except Exception as e:
+            logging.warning(f"Не смог уведомить админа: {e}")
+
+    await callback.message.delete()
+    await callback.message.answer(
+        f"✅ *Запрос на выплату создан*\n\n"
+        f"Сумма: *{payout.amount:.0f} ₽*\n"
+        f"Реквизиты: {partner.payment_details}\n\n"
+        f"Обычно обработка занимает до 24 часов. Мы уведомим тебя, когда выплата будет выполнена.",
+        parse_mode="Markdown",
+        reply_markup=partner_back_to_main(),
     )
