@@ -35,7 +35,7 @@ env = Environment(
 env.filters["from_json"] = lambda s: json.loads(s) if s else {}
 
 serializer = URLSafeTimedSerializer(WEB_SECRET_KEY, salt="web-session")
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["bcrypt_sha256", "bcrypt"], deprecated="auto")
 SESSION_MAX_AGE = 60 * 60 * 24 * 7
 
 ALL_PERMISSIONS = [
