@@ -14,12 +14,22 @@
   <div class="w-14 h-14 rounded-2xl grid place-items-center mb-5"
        style="background:linear-gradient(135deg,#7c3aed,#3b82f6);box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 14px 28px -8px rgba(124,58,237,.8)"><i data-lucide="gamepad-2" class="text-white w-6 h-6"></i></div>
   <h1 class="text-2xl font-bold">MyrShop Admin</h1>
-  <p class="text-sm text-muted mb-6">Введите пароль для входа</p>
-  <input type="password" name="password" placeholder="Пароль" autofocus
-         class="w-full border border-gray-800 rounded-2xl px-4 py-3 mb-3 outline-none transition-all duration-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30 placeholder:text-gray-500"
-         style="background:#0f0e13;box-shadow:inset 0 2px 4px rgba(0,0,0,.6),0 1px 0 rgba(255,255,255,.04)">
+  <p class="text-sm text-muted mb-6">Вход для владельца и менеджеров</p>
+
+  <div class="relative mb-3">
+    <i data-lucide="user-round" class="w-4 h-4 text-gray-500 absolute left-4 top-1/2 -translate-y-1/2"></i>
+    <input type="text" name="login" placeholder="Логин (для владельца пусто)"
+           class="w-full border border-gray-800 rounded-2xl pl-11 pr-4 py-3 outline-none transition-all duration-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30 placeholder:text-gray-500"
+           style="background:#0f0e13;box-shadow:inset 0 2px 4px rgba(0,0,0,.6),0 1px 0 rgba(255,255,255,.04)">
+  </div>
+  <div class="relative mb-3">
+    <i data-lucide="lock" class="w-4 h-4 text-gray-500 absolute left-4 top-1/2 -translate-y-1/2"></i>
+    <input type="password" name="password" placeholder="Пароль" autofocus
+           class="w-full border border-gray-800 rounded-2xl pl-11 pr-4 py-3 outline-none transition-all duration-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/30 placeholder:text-gray-500"
+           style="background:#0f0e13;box-shadow:inset 0 2px 4px rgba(0,0,0,.6),0 1px 0 rgba(255,255,255,.04)">
+  </div>
   {% if error %}<p class="text-rose-400 text-sm mb-3">{{ error }}</p>{% endif %}
-  <button class="w-full text-white font-semibold py-3 rounded-full transition-all duration-300 hover:-translate-y-0.5 hover:brightness-110 active:translate-y-px"
+  <button class="w-full text-white font-semibold py-3 mt-1 rounded-full transition-all duration-300 hover:-translate-y-0.5 hover:brightness-110 active:translate-y-px"
           style="background:linear-gradient(135deg,#7c3aed,#3b82f6);box-shadow:inset 0 1px 0 rgba(255,255,255,.3),inset 0 -2px 0 rgba(0,0,0,.2),0 12px 28px -8px rgba(124,58,237,.8)">Войти</button>
 </form>
 <script>lucide.createIcons()</script>

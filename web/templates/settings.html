@@ -60,6 +60,69 @@
   </form>
   <p class="text-xs text-muted mt-3">Если ранг с таким названием уже есть — обновятся его цены.</p>
 </div>
+{% if user.all_perms %}
+<div class="card !p-6 mt-4">
+  <h2 class="text-lg font-semibold mb-4 flex items-center gap-2"><span class="chip !w-8 !h-8"><i data-lucide="users-round" class="w-4 h-4"></i></span>Команда (менеджеры)</h2>
+
+  {% if managers %}
+  <div class="rounded-xl border border-white/10 overflow-hidden mb-6"><div class="overflow-x-auto">
+    <table class="tbl">
+      <thead><tr><th>Логин</th><th>Права</th><th class="!text-right">Действия</th></tr></thead>
+      <tbody>
+      {% for m in managers %}
+        <tr>
+          <td class="font-mono font-semibold">{{ m.login }}</td>
+          <td class="!whitespace-normal">
+            {% set p = m.permissions|from_json %}
+            <div class="flex flex-wrap gap-1.5">{% for key, val in p.items() %}{% if val %}<span class="badge b-blue">{{ key|replace('can_', '') }}</span>{% endif %}{% endfor %}</div>
+          </td>
+          <td class="text-right">
+            <form method="post" class="inline" onsubmit="return confirm('Удалить менеджера {{ m.login }}?')">
+              <input type="hidden" name="action" value="delete_manager">
+              <input type="hidden" name="manager_id" value="{{ m.id }}">
+              <button class="btn btn-danger btn-sm"><i data-lucide="trash-2" class="w-4 h-4"></i>Удалить</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div></div>
+  {% endif %}
+
+  <form method="post" class="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-white/10 pt-4">
+    <input type="hidden" name="action" value="add_manager">
+    <div class="md:col-span-2"><h3 class="font-semibold text-sm text-accent flex items-center gap-2"><i data-lucide="user-plus" class="w-4 h-4"></i>Добавить нового менеджера</h3></div>
+    <div><label class="label">Логин</label><input name="login" required class="input"></div>
+    <div><label class="label">Пароль</label><input name="password" type="text" required class="input font-mono"></div>
+
+    <div class="md:col-span-2">
+      <div class="label">Права доступа</div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+      {% for name, label, icon in [
+      ('can_view_dashboard','Видеть дашборд','layout-dashboard'),
+      ('can_edit_accounts','Редактировать аккаунты','pencil'),
+      ('can_manage_partners','Управлять партнёрами','handshake'),
+      ('can_check_passwords','Проверять пароли','search-check'),
+      ('can_pay_partners','Выплачивать партнёрам','wallet'),
+      ('can_ban_customers','Банить покупателей','ban'),
+      ('can_edit_settings','Менять настройки','settings')] %}
+        <label class="cursor-pointer relative block">
+          <input type="checkbox" name="{{ name }}" class="peer sr-only">
+          <div class="tier !py-2.5 peer-checked:border-purple-500 peer-checked:shadow-glow peer-focus-visible:ring-2 peer-focus-visible:ring-purple-500/60">
+            <span class="chip chip-mute !w-8 !h-8"><i data-lucide="{{ icon }}" class="w-4 h-4"></i></span>
+            <span class="text-sm">{{ label }}</span>
+          </div>
+          <i data-lucide="check-circle-2" class="w-5 h-5 text-accent absolute right-3 top-1/2 -translate-y-1/2 opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none"></i>
+        </label>
+      {% endfor %}
+      </div>
+    </div>
+
+    <div class="md:col-span-2"><button class="btn btn-primary"><i data-lucide="user-plus" class="w-4 h-4"></i>Создать менеджера</button></div>
+  </form>
+</div>
+{% endif %}
 <script>
 document.getElementById('commission').addEventListener('input', e => {
   const v = parseFloat(e.target.value);

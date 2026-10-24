@@ -99,23 +99,34 @@ tailwind.config = { theme: { extend: {
 </style>
 </head>
 <body class="bg-bg text-ink font-sans min-h-screen antialiased">
+{% block nav %}
 <nav class="sticky top-0 z-40 backdrop-blur-xl border-b border-white/10" style="background:rgba(20,19,22,.72);box-shadow:0 12px 32px -16px #000, inset 0 -1px 0 rgba(255,255,255,.04)">
   <div class="max-w-7xl mx-auto px-4 py-2 min-h-14 flex flex-wrap items-center gap-1">
     <a href="/" class="flex items-center gap-2.5 font-bold mr-4 shrink-0">
       <span class="w-9 h-9 rounded-xl grid place-items-center" style="background:linear-gradient(135deg,#7c3aed,#3b82f6);box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 8px 20px -6px rgba(124,58,237,.8)"><i data-lucide="gamepad-2" class="w-4 h-4 text-white"></i></span>
       <span class="hidden sm:inline">MyrShop</span>
     </a>
-    <a href="/" title="Дашборд" class="navlink"><i data-lucide="layout-dashboard" class="w-4 h-4"></i><span class="hidden xl:inline">Дашборд</span></a>
-    <a href="/accounts" title="Аккаунты" class="navlink"><i data-lucide="layout-list" class="w-4 h-4"></i><span class="hidden xl:inline">Аккаунты</span></a>
-    <a href="/customers" title="Покупатели" class="navlink"><i data-lucide="users-round" class="w-4 h-4"></i><span class="hidden xl:inline">Покупатели</span></a>
-    <a href="/partners" title="Партнёры" class="navlink"><i data-lucide="handshake" class="w-4 h-4"></i><span class="hidden xl:inline">Партнёры</span></a>
-    <a href="/password-change" title="Пароли" class="navlink"><i data-lucide="key-round" class="w-4 h-4"></i><span class="hidden xl:inline">Пароли</span></a>
+    {% if user.all_perms or user.perms.can_view_dashboard %}
+      <a href="/" title="Дашборд" class="navlink"><i data-lucide="layout-dashboard" class="w-4 h-4"></i><span class="hidden xl:inline">Дашборд</span></a>
+    {% endif %}
+    {% if user.all_perms or user.perms.can_edit_accounts %}
+      <a href="/accounts" title="Аккаунты" class="navlink"><i data-lucide="layout-list" class="w-4 h-4"></i><span class="hidden xl:inline">Аккаунты</span></a>
+    {% endif %}
+    {% if user.all_perms or user.perms.can_ban_customers %}
+      <a href="/customers" title="Покупатели" class="navlink"><i data-lucide="users-round" class="w-4 h-4"></i><span class="hidden xl:inline">Покупатели</span></a>
+    {% endif %}
+    {% if user.all_perms or user.perms.can_manage_partners %}
+      <a href="/partners" title="Партнёры" class="navlink"><i data-lucide="handshake" class="w-4 h-4"></i><span class="hidden xl:inline">Партнёры</span></a>
+      <a href="/password-change" title="Пароли" class="navlink"><i data-lucide="key-round" class="w-4 h-4"></i><span class="hidden xl:inline">Пароли</span></a>
+    {% endif %}
     <a href="/notifications" title="Уведомления" class="navlink"><i data-lucide="bell" class="w-4 h-4"></i><span class="hidden xl:inline">Уведомления</span></a>
-    <a href="/export" title="Экспорт" class="navlink"><i data-lucide="upload" class="w-4 h-4"></i><span class="hidden xl:inline">Экспорт</span></a>
-    <a href="/settings" title="Настройки" class="navlink"><i data-lucide="settings" class="w-4 h-4"></i><span class="hidden xl:inline">Настройки</span></a>
+    {% if user.all_perms or user.perms.can_edit_settings %}
+      <a href="/settings" title="Настройки" class="navlink"><i data-lucide="settings" class="w-4 h-4"></i><span class="hidden xl:inline">Настройки</span></a>
+    {% endif %}
     <a href="/logout" title="Выйти" class="navlink ml-auto hover:!text-bad shrink-0" data-noactive><i data-lucide="log-out" class="w-4 h-4"></i><span class="hidden xl:inline">Выйти</span></a>
   </div>
 </nav>
+{% endblock %}
 
 <div id="toasts" class="fixed top-20 right-4 left-4 sm:left-auto sm:w-80 space-y-2 z-50"></div>
 
@@ -168,7 +179,7 @@ function showToast(e) {
   document.getElementById("toasts").appendChild(div);
   setTimeout(() => { div.style.opacity = 0; setTimeout(() => div.remove(), 300); }, 6000);
 }
-pollNotifications();
+{% block poll %}pollNotifications();{% endblock %}
 </script>
 </body>
 </html>
