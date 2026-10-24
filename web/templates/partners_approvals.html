@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import avatar %}
 {% block title %}Ожидают одобрения{% endblock %}
 {% block content %}
 <a href="/partners" class="text-sm text-muted hover:text-accent inline-flex items-center gap-1"><i data-lucide="arrow-left" class="w-4 h-4"></i>к дашборду</a>
@@ -15,7 +16,7 @@
     <div class="card card-hover !p-5">
       <div class="flex items-start justify-between mb-4 gap-3 flex-wrap">
         <div class="flex items-center gap-3">
-          <span class="avatar">{{ (partner.full_name or partner.username or '?')[0]|upper }}</span>
+          {{ avatar(partner.avatar_id, partner.full_name or partner.username) }}
           <div>
             <div class="font-semibold">Заявка от <a href="/partners/{{ partner.id }}" class="link">{{ partner.full_name or '@' + (partner.username or partner.telegram_id|string) }}</a></div>
             <div class="text-xs font-mono text-muted">{{ a.created_at.strftime('%d.%m %H:%M') }}</div>

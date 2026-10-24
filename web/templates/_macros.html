@@ -9,3 +9,7 @@
 {% elif s == 'awaiting_approval' %}<span class="badge b-blue"><i data-lucide="search" class="w-3 h-3"></i>пароль</span>
 {% endif %}
 {%- endmacro %}
+
+{% macro avatar(avatar_id, name, cls='') -%}
+{% if avatar_id %}<img src="/api/photo/{{ avatar_id }}" alt="" class="avatar object-cover {{ cls }}">{% else %}<span class="avatar {{ cls }}">{{ (name or '?')[0]|upper }}</span>{% endif %}
+{%- endmacro %}

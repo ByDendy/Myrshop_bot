@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import avatar %}
 {% block title %}Партнёры{% endblock %}
 {% block content %}
 <a href="/partners" class="text-sm text-muted hover:text-accent inline-flex items-center gap-1"><i data-lucide="arrow-left" class="w-4 h-4"></i>к дашборду</a>
@@ -26,7 +27,7 @@
     <tr>
       <td class="font-mono text-muted">{{ p.id }}</td>
       <td><div class="flex items-center gap-3">
-        <span class="avatar">{{ (p.full_name or '?')[0]|upper }}</span>
+        {{ avatar(p.avatar_id, p.full_name) }}
         <div><a href="/partners/{{ p.id }}" class="link font-medium">{{ p.full_name or 'без имени' }}</a>
           {% if p.username %}<div class="text-xs text-muted">@{{ p.username }}</div>{% endif %}</div></div></td>
       <td class="font-mono">{{ p.accounts_count }}</td>

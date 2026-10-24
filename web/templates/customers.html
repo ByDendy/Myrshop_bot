@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import avatar %}
 {% block title %}Покупатели{% endblock %}
 {% block content %}
 <h1 class="text-2xl font-bold mb-4 flex items-center gap-2"><i data-lucide="users-round" class="text-accent"></i>Покупатели</h1>
@@ -12,7 +13,7 @@
     <tr {% if c.is_banned %}style="background:linear-gradient(90deg,rgba(251,113,133,.10),transparent)"{% endif %}>
       <td class="font-mono text-xs text-muted">{{ c.telegram_id }}</td>
       <td><div class="flex items-center gap-3">
-        <span class="avatar">{{ (c.first_name or '?')[0]|upper }}</span>
+        {{ avatar(c.avatar_id, c.first_name) }}
         <div><div class="font-semibold">{{ c.first_name or "Без имени" }}</div>
           {% if c.username %}<a href="https://t.me/{{ c.username }}" target="_blank" class="link text-xs">@{{ c.username }}</a>{% endif %}</div></div></td>
       <td class="text-right font-mono text-accent font-bold">{{ row.spent }} ₽</td>
