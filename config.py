@@ -21,3 +21,4 @@ FUNPAY_AUTO_LOTS_ENABLED = os.getenv(
 WEB_ADMIN_PASSWORD = os.getenv("WEB_ADMIN_PASSWORD", "")
 WEB_SECRET_KEY = os.getenv("WEB_SECRET_KEY", "change-me-please")
 WEB_PORT = int(os.getenv("PORT", "8080"))
+WEB_BASE_URL = os.getenv("WEB_BASE_URL", "https://myrshopbot-production.up.railway.app")
