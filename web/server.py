@@ -1,5 +1,6 @@
 import logging
 import json
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -31,8 +32,10 @@ env = Environment(
     autoescape=select_autoescape(["html"]),
 )
 
-# Регистрируем фильтр from_json для шаблона settings.html
+# Глобалы для шаблонов
 env.filters["from_json"] = lambda s: json.loads(s) if s else {}
+env.globals["timedelta"] = timedelta
+env.globals["RESERVE_MINUTES"] = 15
 
 serializer = URLSafeTimedSerializer(WEB_SECRET_KEY, salt="web-session")
 pwd_context = CryptContext(schemes=["pbkdf2_sha256", "bcrypt_sha256", "bcrypt"], deprecated="auto")
@@ -42,6 +45,43 @@ ALL_PERMISSIONS = [
     "can_view_dashboard", "can_edit_accounts", "can_manage_partners",
     "can_check_passwords", "can_pay_partners", "can_ban_customers", "can_edit_settings"
 ]
+
+# Кеш для счетчиков в меню
+_nav_cache = {}
+
+async def get_nav_counts(session, user):
+    if not user: return {"approvals": 0, "passwords": 0, "payouts": 0}
+    
+    cache_key = str(user.get("role")) + str(user.get("id")) + str(user.get("perms"))
+    now = time.time()
+    if cache_key in _nav_cache and _nav_cache[cache_key]["expires"] > now:
+        return _nav_cache[cache_key]["data"]
+
+    counts = {"approvals": 0, "passwords": 0, "payouts": 0}
+    perms = user.get("perms", {})
+    is_owner = user.get("all_perms", False)
+
+    if is_owner or perms.get("can_manage_partners"):
+        counts["approvals"] = (await session.execute(select(func.count(Account.id)).where(Account.status == "pending_approval"))).scalar() or 0
+    
+    if is_owner or perms.get("can_check_passwords"):
+        counts["passwords"] = (await session.execute(select(func.count(Account.id)).where(Account.status.in_(["awaiting_approval", "awaiting_password_change"])))).scalar() or 0
+        
+    if is_owner or perms.get("can_pay_partners"):
+        counts["payouts"] = (await session.execute(select(func.count(PartnerPayout.id)).where(PartnerPayout.status == "requested"))).scalar() or 0
+
+    _nav_cache[cache_key] = {"data": counts, "expires": now + 30}
+    return counts
+
+
+async def render_admin(request, template_name, **kwargs):
+    """Хелпер для рендера страниц админки с автоматической передачей счетчиков."""
+    async with async_session() as session:
+        user = request.get("user")
+        nav_counts = await get_nav_counts(session, user)
+    kwargs["nav_counts"] = nav_counts
+    kwargs["user"] = user
+    return env.get_template(template_name).render(**kwargs)
 
 
 # ─── Авторизация ───
@@ -66,14 +106,12 @@ async def auth_middleware(request, handler):
     if not data:
         raise web.HTTPFound("/login")
 
-    # Если это партнёр
     if data.get("type") == "partner":
         if not request.path.startswith("/partner-portal"):
             raise web.HTTPForbidden(text="Доступ только в личный кабинет.")
         request["user"] = {"role": "partner", "partner_id": data["id"]}
         return await handler(request)
 
-    # Если это владелец или менеджер
     if data.get("type") == "owner":
         request["user"] = {"role": "owner", "all_perms": True, "perms": {}}
     elif data.get("type") == "manager":
@@ -82,11 +120,10 @@ async def auth_middleware(request, handler):
             if not mgr:
                 raise web.HTTPFound("/login")
             perms = json.loads(mgr.permissions) if mgr.permissions else {}
-            request["user"] = {"role": "manager", "perms": perms, "all_perms": False}
+            request["user"] = {"role": "manager", "id": mgr.id, "perms": perms, "all_perms": False}
     else:
         raise web.HTTPFound("/login")
 
-    # Защита URL от прямого ввода
     user = request["user"]
     if not user["all_perms"]:
         perms = user["perms"]
@@ -108,14 +145,12 @@ async def login_page(request: web.Request):
         login = data.get("login", "").strip()
         pwd = data.get("password", "")
 
-        # 1. Владелец (пустой логин)
         if not login and pwd == WEB_ADMIN_PASSWORD:
             token = serializer.dumps({"type": "owner"})
             resp = web.HTTPFound("/")
             resp.set_cookie("session", token, max_age=SESSION_MAX_AGE, httponly=True)
             raise resp
 
-        # 2. Менеджер
         if login:
             async with async_session() as session:
                 mgr = (await session.execute(select(Manager).where(Manager.login == login))).scalar_one_or_none()
@@ -137,7 +172,7 @@ async def partner_auth(request: web.Request):
         raise web.HTTPForbidden(text="Токен не передан")
 
     try:
-        data = serializer.loads(token, max_age=900)  # 15 минут
+        data = serializer.loads(token, max_age=900)
     except SignatureExpired:
         raise web.HTTPForbidden(text="Ссылка истекла. Запросите новую в боте.")
     except BadSignature:
@@ -165,6 +200,7 @@ async def partner_portal(request: web.Request):
         payouts = (await session.execute(select(PartnerPayout).where(PartnerPayout.partner_id == partner_id).order_by(desc(PartnerPayout.requested_at)).limit(10))).scalars().all()
         rentals = (await session.execute(select(func.count(RentalHistory.id)).join(Account).where(Account.partner_id == partner_id))).scalar() or 0
 
+    # Партнёрский портал не использует базовый шаблон, поэтому nav_counts не нужен
     html = env.get_template("partner_portal.html").render(p=partner, accounts=accounts, payouts=payouts, rentals=rentals)
     return web.Response(text=html, content_type="text/html")
 
@@ -225,11 +261,10 @@ async def dashboard(request: web.Request):
             accs = (await session.execute(select(Account).where(Account.id.in_(ids)))).scalars().all()
             acc_map = {a.id: a for a in accs}
 
-    html = env.get_template("dashboard.html").render(
+    html = await render_admin(request, "dashboard.html",
         accounts_total=accounts_total, active=active, awaiting=awaiting,
         total_rentals=total_rentals, total_hours=total_hours,
-        total_revenue=round(total_revenue, 2), recent=recent, acc_map=acc_map,
-        user=request.get("user")
+        total_revenue=round(total_revenue, 2), recent=recent, acc_map=acc_map
     )
     return web.Response(text=html, content_type="text/html")
 
@@ -239,19 +274,27 @@ async def dashboard(request: web.Request):
 async def accounts_list(request: web.Request):
     rank = request.query.get("rank", "").strip()
     owner_filter = request.query.get("owner", "").strip()
+    status_filter = request.query.get("status", "").strip()
+    q = request.query.get("q", "").strip().lower()
 
     async with async_session() as session:
-        q = select(Account).order_by(Account.rank, Account.id)
-        if rank: q = q.where(Account.rank == rank)
-        if owner_filter == "me": q = q.where(Account.partner_id.is_(None))
-        elif owner_filter == "partner": q = q.where(Account.partner_id.isnot(None))
+        query = select(Account).order_by(Account.rank, Account.id)
+        if rank: query = query.where(Account.rank == rank)
+        if owner_filter == "me": query = query.where(Account.partner_id.is_(None))
+        elif owner_filter == "partner": query = query.where(Account.partner_id.isnot(None))
+        if status_filter: query = query.where(Account.status == status_filter)
+        
+        accounts = (await session.execute(query)).scalars().all()
+        
+        # Живой поиск (в Python, чтобы не грузить БД лишний раз)
+        if q:
+            accounts = [a for a in accounts if q in str(a.id).lower() or q in a.login.lower() or q in a.rank.lower() or (a.riot_id and q in a.riot_id.lower())]
 
-        accounts = (await session.execute(q)).scalars().all()
         ranks = (await session.execute(select(Account.rank).distinct().order_by(Account.rank))).scalars().all()
 
-    html = env.get_template("accounts.html").render(
+    html = await render_admin(request, "accounts.html",
         accounts=accounts, ranks=ranks, current_rank=rank,
-        owner_filter=owner_filter, timedelta=timedelta, user=request.get("user")
+        owner_filter=owner_filter, current_status=status_filter, q=q
     )
     return web.Response(text=html, content_type="text/html")
 
@@ -275,9 +318,9 @@ async def account_detail(request: web.Request):
 
     recent_matches = await get_recent_matches(account.riot_id) if account.riot_id else []
 
-    html = env.get_template("account_detail.html").render(
+    html = await render_admin(request, "account_detail.html",
         a=account, period=period, rentals=stats[0], hours=stats[1], revenue=round(stats[2], 2),
-        history=history, recent_matches=recent_matches, user=request.get("user")
+        history=history, recent_matches=recent_matches
     )
     return web.Response(text=html, content_type="text/html")
 
@@ -309,10 +352,10 @@ async def account_add_page(request: web.Request):
                 session.add(acc)
                 await session.commit()
                 acc_id = acc.id
-            notifications.push("Добавлен аккаунт", f"#{acc_id} · {acc.rank}", level="success")
+            notifications.push("Добавлен аккаунт", f"#{acc_id} · {acc.rank}", level="success", url=f"/accounts/{acc_id}")
             raise web.HTTPFound(f"/accounts/{acc_id}")
 
-    html = env.get_template("account_add.html").render(error=error, user=request.get("user"))
+    html = await render_admin(request, "account_add.html", error=error)
     return web.Response(text=html, content_type="text/html")
 
 
@@ -348,12 +391,12 @@ async def account_edit_page(request: web.Request):
                 account.price_6h = float(post["price_6h"])
                 account.price_12h = float(post["price_12h"])
                 await session.commit()
-                notifications.push("Аккаунт обновлён", f"#{acc_id}", level="success")
+                notifications.push("Аккаунт обновлён", f"#{acc_id}", level="success", url=f"/accounts/{acc_id}")
                 raise web.HTTPFound(f"/accounts/{acc_id}")
             except (KeyError, ValueError) as e:
                 error = f"Ошибка: {e}"
 
-    html = env.get_template("account_edit.html").render(a=account, error=error, user=request.get("user"))
+    html = await render_admin(request, "account_edit.html", a=account, error=error)
     return web.Response(text=html, content_type="text/html")
 
 
@@ -376,9 +419,7 @@ async def awaiting_list(request: web.Request):
     my_accounts = [a for a in all_accounts if not a.partner_id]
     partner_accounts = [a for a in all_accounts if a.partner_id]
 
-    html = env.get_template("password_change.html").render(
-        my_accounts=my_accounts, partner_accounts=partner_accounts, user=request.get("user")
-    )
+    html = await render_admin(request, "password_change.html", my_accounts=my_accounts, partner_accounts=partner_accounts)
     return web.Response(text=html, content_type="text/html")
 
 
@@ -398,13 +439,15 @@ async def mark_password_changed(request: web.Request):
             acc.payment_invoice_id = None
             acc.password_changed_at = datetime.utcnow()
             await session.commit()
-            notifications.push("Пароль сменён", f"#{acc_id} — снова свободен", level="success")
+            notifications.push("Пароль сменён", f"#{acc_id} — снова свободен", level="success", url=f"/accounts/{acc_id}")
     raise web.HTTPFound("/password-change")
 
 
 # ─── Покупатели ───
 
 async def customers_list(request: web.Request):
+    q = request.query.get("q", "").strip().lower()
+
     async with async_session() as session:
         buyer_ids = (await session.execute(select(RentalHistory.buyer_id).distinct().where(RentalHistory.buyer_id.isnot(None)))).scalars().all()
 
@@ -427,10 +470,13 @@ async def customers_list(request: web.Request):
         result = []
         for c in custs:
             st = stats.get(c.telegram_id, {"spent": 0, "hours": 0, "count": 0})
+            # Живой поиск
+            if q and not (q in str(c.telegram_id) or q in (c.first_name or "").lower() or q in (c.username or "").lower()):
+                continue
             result.append({"customer": c, **st})
         result.sort(key=lambda x: x["spent"], reverse=True)
 
-    html = env.get_template("customers.html").render(customers=result, user=request.get("user"))
+    html = await render_admin(request, "customers.html", customers=result, q=q)
     return web.Response(text=html, content_type="text/html")
 
 
@@ -476,9 +522,9 @@ async def customer_detail(request: web.Request):
             .where(RentalHistory.buyer_id == customer_id).order_by(desc(RentalHistory.started_at)).limit(50)
         )).all()
 
-    html = env.get_template("customer_detail.html").render(
+    html = await render_admin(request, "customer_detail.html",
         c=customer, total_spent=round(stats[0] or 0, 2), total_hours=int(stats[1] or 0), total_rentals=int(stats[2] or 0),
-        favorite_rank=fav[0] if fav else "—", activity_days=days, history=history, user=request.get("user")
+        favorite_rank=fav[0] if fav else "—", activity_days=days, history=history
     )
     return web.Response(text=html, content_type="text/html")
 
@@ -494,7 +540,7 @@ async def customer_ban(request: web.Request):
             customer.ban_reason = reason
             customer.banned_at = datetime.utcnow()
             await session.commit()
-            notifications.push("🚫 Покупатель забанен", f"ID {customer_id} · причина: {reason}", level="warning")
+            notifications.push("🚫 Покупатель забанен", f"ID {customer_id} · причина: {reason}", level="warning", url=f"/customers/{customer_id}")
     raise web.HTTPFound(f"/customers/{customer_id}")
 
 
@@ -507,7 +553,7 @@ async def customer_unban(request: web.Request):
             customer.ban_reason = None
             customer.banned_at = None
             await session.commit()
-            notifications.push("✅ Покупатель разбанен", f"ID {customer_id}", level="success")
+            notifications.push("✅ Покупатель разбанен", f"ID {customer_id}", level="success", url=f"/customers/{customer_id}")
     raise web.HTTPFound(f"/customers/{customer_id}")
 
 
@@ -519,7 +565,7 @@ async def export_page(request: web.Request):
             accounts = (await session.execute(select(Account).order_by(Account.id))).scalars().all()
         lines = [f"{a.login};;{a.password};;{a.rank};;{a.price_3h:g},{a.price_6h:g},{a.price_12h:g}" for a in accounts]
         return web.Response(body="\n".join(lines), content_type="text/plain", headers={"Content-Disposition": 'attachment; filename="accounts.txt"'})
-    html = env.get_template("export.html").render(user=request.get("user"))
+    html = await render_admin(request, "export.html")
     return web.Response(text=html, content_type="text/html")
 
 
@@ -533,7 +579,7 @@ async def notifications_api(request: web.Request):
 async def notifications_page(request: web.Request):
     cat = request.query.get("cat", "all")
     events = notifications.get_all(category=cat)
-    html = env.get_template("notifications.html").render(events=events, cat=cat, user=request.get("user"))
+    html = await render_admin(request, "notifications.html", events=events, cat=cat)
     return web.Response(text=html, content_type="text/html")
 
 
@@ -618,10 +664,9 @@ async def settings_page(request: web.Request):
         ranks = (await session.execute(select(RankSetting).order_by(RankSetting.rank))).scalars().all()
         managers = (await session.execute(select(Manager).order_by(Manager.id))).scalars().all()
 
-    html = env.get_template("settings.html").render(
+    html = await render_admin(request, "settings.html",
         commission=commission_float, partner_share=round(partner_share, 1),
-        ranks=ranks, managers=managers, error=error, success=success,
-        user=request.get("user")
+        ranks=ranks, managers=managers, error=error, success=success
     )
     return web.Response(text=html, content_type="text/html")
 
@@ -648,12 +693,11 @@ async def partners_dashboard(request: web.Request):
         recent_events_raw = notifications.get_all(category="partner")[:10]
         recent_events = [{"partner_id": 0, "partner_name": "—", "event": e["title"] + (" — " + e["text"] if e["text"] else ""), "ts": e["ts"]} for e in recent_events_raw]
 
-    html = env.get_template("partners_dashboard.html").render(
+    html = await render_admin(request, "partners_dashboard.html",
         partners_active=partners_active, accounts_total=accounts_total, pending_moderation=pending_moderation,
         pending_payouts=pending_payouts, pending_payout_amount=round(pending_payout_amount),
         revenue_30d=round(revenue_30d), total_balance=round(total_balance),
-        total_frozen=round(total_frozen), total_paid=round(total_paid), recent_events=recent_events,
-        user=request.get("user")
+        total_frozen=round(total_frozen), total_paid=round(total_paid), recent_events=recent_events
     )
     return web.Response(text=html, content_type="text/html")
 
@@ -672,9 +716,9 @@ async def partners_list(request: web.Request):
         partners_data = []
         for p in partners_raw:
             cnt = (await session.execute(select(func.count(Account.id)).where(Account.partner_id == p.id))).scalar() or 0
-            partners_data.append({"id": p.id, "full_name": p.full_name, "username": p.username, "telegram_id": p.telegram_id, "balance": round(p.balance or 0), "total_earned": round(p.total_earned or 0), "status": p.status, "accounts_count": cnt})
+            partners_data.append({"id": p.id, "full_name": p.full_name, "username": p.username, "telegram_id": p.telegram_id, "avatar_id": p.avatar_id, "balance": round(p.balance or 0), "total_earned": round(p.total_earned or 0), "status": p.status, "accounts_count": cnt})
 
-    html = env.get_template("partners_list.html").render(partners=partners_data, q=q, status_filter=status_filter, user=request.get("user"))
+    html = await render_admin(request, "partners_list.html", partners=partners_data, q=q, status_filter=status_filter)
     return web.Response(text=html, content_type="text/html")
 
 
@@ -691,9 +735,8 @@ async def partner_detail(request: web.Request):
 
         pending_request = (await session.execute(select(PartnerPayout).where(PartnerPayout.partner_id == partner_id, PartnerPayout.status == "requested").limit(1))).scalar_one_or_none()
 
-    html = env.get_template("partner_detail.html").render(
-        p=partner, accounts=accounts, payouts=payouts, earnings=earnings, acc_map=acc_map, pending_request=pending_request,
-        user=request.get("user")
+    html = await render_admin(request, "partner_detail.html",
+        p=partner, accounts=accounts, payouts=payouts, earnings=earnings, acc_map=acc_map, pending_request=pending_request
     )
     return web.Response(text=html, content_type="text/html")
 
@@ -726,7 +769,7 @@ async def partner_payout_direct(request: web.Request):
         if not p: raise web.HTTPFound(f"/partners/{partner_id}")
         payout, error = await manual_payout(session, p)
         if error: raise web.HTTPFound(f"/partners/{partner_id}")
-        notifications.push("💸 Выплата партнёру", f"{p.full_name} — {payout.amount:.0f} ₽", level="success", category="partner")
+        notifications.push("💸 Выплата партнёру", f"{p.full_name} — {payout.amount:.0f} ₽", level="success", category="partner", url=f"/partners/{partner_id}")
         await _notify_partner_tg(bot, p, f"💸 *Выплата выполнена*\n\nСумма: *{payout.amount:.0f} ₽*\n\nСпасибо за работу! Продолжай в том же духе 🤝")
     raise web.HTTPFound(f"/partners/{partner_id}")
 
@@ -740,7 +783,7 @@ async def partners_approvals(request: web.Request):
             rank_setting = (await session.execute(select(RankSetting).where(RankSetting.rank == acc.rank))).scalar_one_or_none()
             items.append({"account": acc, "partner": partner, "min_3h": rank_setting.min_price_3h if rank_setting else 0, "min_6h": rank_setting.min_price_6h if rank_setting else 0, "min_12h": rank_setting.min_price_12h if rank_setting else 0})
 
-    html = env.get_template("partners_approvals.html").render(accounts=items, user=request.get("user"))
+    html = await render_admin(request, "partners_approvals.html", accounts=items)
     return web.Response(text=html, content_type="text/html")
 
 
@@ -753,7 +796,7 @@ async def partner_approve(request: web.Request):
             acc.status = "free"
             acc.approved_at = datetime.utcnow()
             await session.commit()
-            notifications.push("✅ Аккаунт одобрен", f"#{acc.id} · {acc.rank}", level="success", category="partner")
+            notifications.push("✅ Аккаунт одобрен", f"#{acc.id} · {acc.rank}", level="success", category="partner", url=f"/accounts/{acc.id}")
             if acc.partner_id:
                 partner = await session.get(Partner, acc.partner_id)
                 await _notify_partner_tg(bot, partner, f"✅ *Твой аккаунт одобрен!*\n\nАккаунт #{acc.id} · {acc.rank}\nТеперь он в магазине и доступен для аренды.")
@@ -771,7 +814,7 @@ async def partner_reject(request: web.Request):
             acc.status = "rejected"
             acc.reject_reason = reason
             await session.commit()
-            notifications.push("❌ Аккаунт отклонён", f"#{acc.id} · {acc.rank} — {reason}", level="danger", category="partner")
+            notifications.push("❌ Аккаунт отклонён", f"#{acc.id} · {acc.rank} — {reason}", level="danger", category="partner", url=f"/accounts/{acc.id}")
             if acc.partner_id:
                 partner = await session.get(Partner, acc.partner_id)
                 await _notify_partner_tg(bot, partner, f"❌ *Твой аккаунт отклонён*\n\nАккаунт #{acc.id} · {acc.rank}\n\n*Причина:* {reason}\n\nИсправь проблему и добавь аккаунт заново.")
@@ -786,7 +829,7 @@ async def partners_passwords(request: web.Request):
             partner = await session.get(Partner, acc.partner_id) if acc.partner_id else None
             items.append({"account": acc, "partner": partner})
 
-    html = env.get_template("partners_passwords.html").render(accounts=items, user=request.get("user"))
+    html = await render_admin(request, "partners_passwords.html", accounts=items)
     return web.Response(text=html, content_type="text/html")
 
 
@@ -803,7 +846,7 @@ async def partner_password_approve(request: web.Request):
             acc.rented_until = None
             acc.reserved_at = None
             await session.commit()
-            notifications.push("✅ Пароль принят", f"#{acc.id} — аккаунт снова в магазине", level="success", category="partner")
+            notifications.push("✅ Пароль принят", f"#{acc.id} — аккаунт снова в магазине", level="success", category="partner", url=f"/accounts/{acc.id}")
             if acc.partner_id:
                 partner = await session.get(Partner, acc.partner_id)
                 await _notify_partner_tg(bot, partner, f"✅ *Пароль принят*\n\nАккаунт #{acc.id} · {acc.rank}\nСнова в магазине, ждёт следующего арендатора.")
@@ -820,7 +863,7 @@ async def partner_password_reject(request: web.Request):
         if acc and acc.status == "awaiting_approval":
             acc.status = "awaiting_review"
             await session.commit()
-            notifications.push("❌ Пароль отклонён", f"#{acc.id} · {acc.rank} — {reason}", level="danger", category="partner")
+            notifications.push("❌ Пароль отклонён", f"#{acc.id} · {acc.rank} — {reason}", level="danger", category="partner", url=f"/accounts/{acc.id}")
             if acc.partner_id:
                 partner = await session.get(Partner, acc.partner_id)
                 await _notify_partner_tg(bot, partner, f"❌ *Пароль не принят*\n\nАккаунт #{acc.id} · {acc.rank}\n\n*Причина:* {reason}\n\nСмени пароль правильно и отправь заново.")
@@ -835,7 +878,7 @@ async def partners_payouts(request: web.Request):
             partner = await session.get(Partner, po.partner_id)
             items.append({"payout": po, "partner": partner})
 
-    html = env.get_template("partners_payouts.html").render(payouts=items, user=request.get("user"))
+    html = await render_admin(request, "partners_payouts.html", payouts=items)
     return web.Response(text=html, content_type="text/html")
 
 
@@ -852,7 +895,7 @@ async def partner_payout_pay(request: web.Request):
         if success:
             partner = await session.get(Partner, po.partner_id)
             await _notify_partner_tg(bot, partner, f"💸 *Выплата выполнена*\n\nСумма: *{po.amount:.0f} ₽*\n\nСпасибо за работу!")
-            notifications.push("💸 Выплата партнёру", f"{partner.full_name if partner else '?'} — {po.amount:.0f} ₽", level="success", category="partner")
+            notifications.push("💸 Выплата партнёру", f"{partner.full_name if partner else '?'} — {po.amount:.0f} ₽", level="success", category="partner", url=f"/partners/{po.partner_id}")
     raise web.HTTPFound("/partners/payouts")
 
 
@@ -868,7 +911,7 @@ async def partner_payout_reject(request: web.Request):
         if success:
             partner = await session.get(Partner, po.partner_id)
             await _notify_partner_tg(bot, partner, f"❌ *Запрос на выплату отклонён*\n\nСумма: {po.amount:.0f} ₽\n*Причина:* {reason}\n\nДеньги возвращены на баланс. Проверь реквизиты и запроси снова.")
-            notifications.push("❌ Выплата отклонена", f"Партнёр #{po.partner_id} — {reason}", level="danger", category="partner")
+            notifications.push("❌ Выплата отклонена", f"Партнёр #{po.partner_id} — {reason}", level="danger", category="partner", url=f"/partners/{po.partner_id}")
     raise web.HTTPFound("/partners/payouts")
 
 
@@ -927,5 +970,6 @@ def create_web_app(bot):
     app.router.add_post("/partners/{id}/unblock", partner_unblock)
     app.router.add_post("/partners/{id}/payout", partner_payout_direct)
 
+    app.router.add_static('/static', path='static')
     register_photo_route(app, bot)
     return app
