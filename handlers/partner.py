@@ -5,6 +5,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from sqlalchemy import select, func
+from itsdangerous import URLSafeTimedSerializer
 
 from database.models import (
     Account, Partner, RankSetting, RentalHistory,
@@ -16,7 +17,7 @@ from keyboards.inline import (
     partner_accounts_keyboard, partner_back_to_main,
 )
 from services.partner_service import request_payout
-from config import ADMIN_IDS
+from config import ADMIN_IDS, WEB_SECRET_KEY, WEB_BASE_URL
 
 router = Router()
 
@@ -76,6 +77,14 @@ async def partner_main(callback: CallbackQuery, session):
         )
         return
 
+    # Генерируем "магическую ссылку" на 15 минут
+    serializer = URLSafeTimedSerializer(WEB_SECRET_KEY, salt="web-session")
+    token = serializer.dumps({"type": "partner", "id": partner.id})
+    web_link = f"{WEB_BASE_URL}/partner-auth?token={token}"
+
+    kb = partner_main_menu(partner)
+    kb.inline_keyboard.insert(0, [InlineKeyboardButton(text="🌐 Войти в личный кабинет на сайте", url=web_link)])
+
     await callback.message.delete()
     await callback.message.answer(
         f"🤝 *Кабинет партнёра*\n\n"
@@ -83,7 +92,7 @@ async def partner_main(callback: CallbackQuery, session):
         f"Твой процент: *{100 - (partner.commission_percent or 10):.0f}%* "
         f"с каждой аренды.",
         parse_mode="Markdown",
-        reply_markup=partner_main_menu(partner),
+        reply_markup=kb,
     )
 
 
@@ -329,8 +338,12 @@ async def partner_delete_account(callback: CallbackQuery, session):
         )
         return
 
+    rank = account.rank
     await session.delete(account)
     await session.commit()
+
+    from web import notifications
+    notifications.push("Партнёр удалил аккаунт", f"#{acc_id} · {rank} (удалил: {partner.full_name or partner.username})", level="warning", category="partner")
 
     await callback.answer(f"✅ Аккаунт #{acc_id} удалён", show_alert=True)
     await partner_accounts(callback, session)
