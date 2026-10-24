@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import (
@@ -7,11 +8,13 @@ from aiogram.types import (
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from sqlalchemy import select
-from database.models import Account, PaymentMethod
+from database.models import Account, PaymentMethod, RentalHistory, Partner
 from keyboards.inline import admin_payments_keyboard
 from services.settings_service import get_setting, set_setting
 from services.funpay_service import FunPayService
+from services.partner_service import on_rental_ended
 from handlers.lot_manager import run_lot_manager_cycle
+from web import notifications
 from config import ADMIN_IDS
 
 router = Router()
@@ -40,6 +43,12 @@ class ChangePassword(StatesGroup):
     new_password = State()
 
 
+def cancel_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_menu")]
+    ])
+
+
 async def admin_menu(session):
     test_mode = await get_setting(session, "test_mode", "0")
     test_icon = "🟢 ВКЛ" if test_mode == "1" else "🔴 ВЫКЛ"
@@ -50,6 +59,7 @@ async def admin_menu(session):
         [InlineKeyboardButton(text="📋 Список аккаунтов", callback_data="admin_list")],
         [InlineKeyboardButton(text="🗑 Удалить аккаунт", callback_data="admin_delete")],
         [InlineKeyboardButton(text="🔓 Снять все брони", callback_data="admin_unlock")],
+        [InlineKeyboardButton(text="⏹ Завершить все аренды", callback_data="admin_end_all_rentals")],
         [InlineKeyboardButton(text="🔑 Ожидают смены пароля", callback_data="admin_awaiting")],
         [InlineKeyboardButton(text="💳 Способы оплаты", callback_data="admin_payments")],
         [InlineKeyboardButton(text="📝 Шаблон описания", callback_data="admin_template")],
@@ -94,6 +104,72 @@ async def toggle_test_mode(callback: CallbackQuery, session):
     await callback.message.edit_reply_markup(reply_markup=await admin_menu(session))
 
 
+# ---------- ЗАВЕРШЕНИЕ ВСЕХ АРЕНД ----------
+
+@router.callback_query(F.data == "admin_end_all_rentals")
+async def end_all_rentals(callback: CallbackQuery, session, funpay: FunPayService):
+    result = await session.execute(select(Account).where(Account.status == "rented"))
+    rented = result.scalars().all()
+    count = len(rented)
+
+    if count == 0:
+        await callback.answer("Нет активных аренд", show_alert=True)
+        return
+
+    now = datetime.utcnow()
+    for acc in rented:
+        # Закрываем историю аренды
+        hist = (await session.execute(
+            select(RentalHistory).where(
+                RentalHistory.account_id == acc.id,
+                RentalHistory.ended_at.is_(None)
+            ).order_by(RentalHistory.started_at.desc())
+        )).scalar_one_or_none()
+        
+        if hist:
+            hist.ended_at = now
+            hist.ended_reason = "manual"
+
+        # Размораживаем партнёрские начисления
+        await on_rental_ended(session, acc)
+
+        # Меняем статус аккаунта
+        if acc.partner_id:
+            acc.status = "awaiting_review"
+        else:
+            acc.status = "awaiting_password_change"
+        
+        acc.last_rental_ended_at = now
+        await session.commit()
+
+        # Уведомление партнёру
+        if acc.partner_id:
+            partner = await session.get(Partner, acc.partner_id)
+            if partner and partner.telegram_id:
+                try:
+                    await callback.bot.send_message(
+                        partner.telegram_id,
+                        f"⏰ *Аренда окончена (вручную администратором)*\n\n"
+                        f"Аккаунт #{acc.id} · {acc.rank}\n\n"
+                        f"Смени пароль от Riot Games и отправь его через "
+                        f"«🤝 Партнёрам» → «📁 Мои аккаунты» → «Сменить пароль».",
+                        parse_mode="Markdown",
+                    )
+                except Exception as e:
+                    logging.warning(f"Не смог уведомить партнёра {partner.telegram_id}: {e}")
+        
+        notifications.push(
+            "Аренда завершена вручную", 
+            f"#{acc.id} · {acc.rank}", 
+            level="warning", 
+            category="partner" if acc.partner_id else "general"
+        )
+
+    await callback.answer(f"✅ Завершено аренд: {count}", show_alert=True)
+    await callback.message.edit_reply_markup(reply_markup=await admin_menu(session))
+    await _trigger_lot_manager(funpay)
+
+
 # ---------- ДОБАВЛЕНИЕ ----------
 
 @router.callback_query(F.data == "admin_add")
@@ -109,28 +185,28 @@ async def add_tier(callback: CallbackQuery, state: FSMContext):
     await state.update_data(tier=tier)
     await state.set_state(AddAccount.login)
     await callback.message.delete()
-    await callback.message.answer("Введите логин аккаунта:")
+    await callback.message.answer("Введите логин аккаунта:", reply_markup=cancel_kb())
 
 
 @router.message(AddAccount.login)
 async def add_login(message: Message, state: FSMContext):
     await state.update_data(login=message.text.strip())
     await state.set_state(AddAccount.password)
-    await message.answer("Введите пароль:")
+    await message.answer("Введите пароль:", reply_markup=cancel_kb())
 
 
 @router.message(AddAccount.password)
 async def add_password(message: Message, state: FSMContext):
     await state.update_data(password=message.text.strip())
     await state.set_state(AddAccount.rank)
-    await message.answer("Введите ранг (например, Diamond 1):")
+    await message.answer("Введите ранг (например, Diamond 1):", reply_markup=cancel_kb())
 
 
 @router.message(AddAccount.rank)
 async def add_rank(message: Message, state: FSMContext):
     await state.update_data(rank=message.text.strip())
     await state.set_state(AddAccount.photo)
-    await message.answer("Отправьте фото товара.\nИли напишите «нет», чтобы пропустить.")
+    await message.answer("Отправьте фото товара.\nИли напишите «нет», чтобы пропустить.", reply_markup=cancel_kb())
 
 
 @router.message(AddAccount.photo)
@@ -138,7 +214,7 @@ async def add_photo(message: Message, state: FSMContext):
     photo_id = message.photo[-1].file_id if message.photo else None
     await state.update_data(photo_id=photo_id)
     await state.set_state(AddAccount.prices)
-    await message.answer("Введите цены аренды через пробел: 3ч 6ч 12ч\nПример: 100 150 250")
+    await message.answer("Введите цены аренды через пробел: 3ч 6ч 12ч\nПример: 100 150 250", reply_markup=cancel_kb())
 
 
 @router.message(AddAccount.prices)
@@ -148,7 +224,7 @@ async def add_prices(message: Message, state: FSMContext, session, funpay: FunPa
         if len(prices) != 3:
             raise ValueError
     except ValueError:
-        await message.answer("❌ Введите три числа через пробел. Пример: 100 150 250")
+        await message.answer("❌ Введите три числа через пробел. Пример: 100 150 250", reply_markup=cancel_kb())
         return
 
     data = await state.get_data()
@@ -183,7 +259,8 @@ async def bulk_tier(callback: CallbackQuery, state: FSMContext):
     await state.set_state(BulkUpload.photo)
     await callback.message.delete()
     await callback.message.answer(
-        "📥 Шаг 1 из 2: отправьте фото для всех аккаунтов.\nИли напишите «нет»."
+        "📥 Шаг 1 из 2: отправьте фото для всех аккаунтов.\nИли напишите «нет».",
+        reply_markup=cancel_kb()
     )
 
 
@@ -197,6 +274,7 @@ async def bulk_photo(message: Message, state: FSMContext):
         "`login;;password;;rank;;100,150,250`\n\n"
         "Пример:\n`user1;;pass1;;Diamond 1;;100,150,250`",
         parse_mode="Markdown",
+        reply_markup=cancel_kb()
     )
 
 
@@ -336,7 +414,7 @@ async def change_password_start(callback: CallbackQuery, state: FSMContext):
     await state.update_data(acc_id=acc_id)
     await state.set_state(ChangePassword.new_password)
     await callback.message.delete()
-    await callback.message.answer(f"Введите новый пароль для #{acc_id}:")
+    await callback.message.answer(f"Введите новый пароль для #{acc_id}:", reply_markup=cancel_kb())
 
 
 @router.message(ChangePassword.new_password)
@@ -399,13 +477,13 @@ async def template_menu(callback: CallbackQuery, session):
 async def template_edit(callback: CallbackQuery, state: FSMContext):
     await state.set_state(EditTemplate.wait_text)
     await callback.message.delete()
-    await callback.message.answer("Отправьте новый шаблон:")
+    await callback.message.answer("Отправьте новый шаблон:", reply_markup=cancel_kb())
 
 
 @router.message(EditTemplate.wait_text)
 async def template_save(message: Message, state: FSMContext, session):
     if len(message.text) < 10:
-        await message.answer("❌ Слишком короткий.")
+        await message.answer("❌ Слишком короткий.", reply_markup=cancel_kb())
         return
     await set_setting(session, "description_template", message.text)
     await state.clear()
