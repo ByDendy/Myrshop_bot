@@ -35,7 +35,6 @@ async def init_db():
         await conn.run_sync(Base.metadata.create_all)
 
     async with async_session() as session:
-        # Способы оплаты
         for code, name, order in [
             ("funpay", "🟡 FunPay", 1),
             ("cryptobot", "🪙 CryptoBot", 2),
@@ -48,7 +47,6 @@ async def init_db():
                     code=code, name=name, order=order, enabled=True,
                 ))
 
-        # Шаблон описания
         tpl = (await session.execute(
             select(Setting).where(Setting.key == "description_template")
         )).scalar_one_or_none()
