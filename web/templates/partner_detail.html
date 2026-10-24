@@ -14,7 +14,7 @@
     <span class="text-xs text-slate-500 ml-2">TG ID: {{ p.telegram_id }}</span>
     <span class="text-xs text-slate-500 ml-2">с {{ p.created_at.strftime('%d.%m.%Y') }}</span>
   </div>
-  <div class="flex gap-2">
+  <div class="flex gap-2 flex-wrap">
     {% if p.status == 'active' %}
       <form method="post" action="/partners/{{ p.id }}/block" onsubmit="return confirm('Заблокировать партнёра?')">
         <button class="bg-rose-600 text-white px-4 py-2 rounded text-sm hover:bg-rose-700">🚫 Заблокировать</button>
@@ -24,15 +24,23 @@
         <button class="bg-emerald-600 text-white px-4 py-2 rounded text-sm hover:bg-emerald-700">✅ Разблокировать</button>
       </form>
     {% endif %}
-    <form method="post" action="/partners/{{ p.id }}/payout" onsubmit="return confirm('Выплатить {{ p.balance }} ₽?')">
-      {% if p.balance and p.balance > 0 %}
+    {% if p.balance and p.balance > 0 %}
+      <form method="post" action="/partners/{{ p.id }}/payout" onsubmit="return confirm('Выплатить {{ p.balance }} ₽?')">
         <button class="bg-emerald-600 text-white px-4 py-2 rounded text-sm hover:bg-emerald-700">
           💰 Выплатить {{ p.balance }} ₽
         </button>
-      {% endif %}
-    </form>
+      </form>
+    {% endif %}
   </div>
 </div>
+
+{% if pending_request %}
+<div class="bg-amber-100 text-amber-800 p-3 rounded mb-4 border border-amber-200 text-sm">
+  ⏳ Есть активный запрос на выплату <b>{{ pending_request.amount }} ₽</b>
+  от {{ pending_request.requested_at.strftime('%d.%m %H:%M') }} —
+  <a href="/partners/payouts" class="underline">обработать</a>
+</div>
+{% endif %}
 
 <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
   <div class="bg-white rounded-lg p-4 shadow">
@@ -84,7 +92,7 @@
         {% elif a.status == 'pending_approval' %}<span class="text-amber-600">⏳ на проверке</span>
         {% elif a.status == 'rejected' %}<span class="text-rose-600">❌ отклонён</span>
         {% elif a.status == 'awaiting_review' %}<span class="text-orange-600">🔑 ждёт пароля</span>
-        {% elif a.status == 'awaiting_approval' %}<span class="text-blue-600">🔍 пароль на проверке</span>
+        {% elif a.status == 'awaiting_approval' %}<span class="text-blue-600">🔍 пароль</span>
         {% endif %}
       </td>
       <td class="px-3 py-2 text-right text-xs font-mono">
@@ -96,6 +104,47 @@
     </tr>
   {% else %}
     <tr><td colspan="6" class="px-3 py-4 text-center text-slate-500">Нет аккаунтов</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<h2 class="text-lg font-bold mb-2">💵 История начислений (30 последних)</h2>
+<div class="bg-white rounded-lg shadow overflow-hidden mb-6">
+<table class="w-full text-sm">
+  <thead class="bg-slate-200">
+    <tr>
+      <th class="px-3 py-2 text-left">Дата</th>
+      <th class="px-3 py-2 text-left">Аккаунт</th>
+      <th class="px-3 py-2 text-right">Партнёру</th>
+      <th class="px-3 py-2 text-right">Платформе</th>
+      <th class="px-3 py-2 text-left">Статус</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for e in earnings %}
+    {% set acc = acc_map.get(e.account_id) %}
+    <tr class="border-t">
+      <td class="px-3 py-2 text-xs">{{ e.created_at.strftime('%d.%m %H:%M') }}</td>
+      <td class="px-3 py-2 text-xs">
+        {% if acc %}
+          <a href="/accounts/{{ acc.id }}" class="text-blue-600 hover:underline">
+            #{{ acc.id }} {{ acc.rank }}
+          </a>
+        {% else %}#{{ e.account_id }}{% endif %}
+      </td>
+      <td class="px-3 py-2 text-right font-mono text-emerald-600">{{ e.amount }} ₽</td>
+      <td class="px-3 py-2 text-right font-mono text-xs text-slate-500">{{ e.platform_amount }} ₽</td>
+      <td class="px-3 py-2">
+        {% if e.status == 'frozen' %}<span class="text-amber-600 text-xs">🧊 заморожено</span>
+        {% elif e.status == 'available' %}<span class="text-blue-600 text-xs">💰 доступно</span>
+        {% elif e.status == 'paid' %}<span class="text-emerald-600 text-xs">✅ выплачено</span>
+        {% elif e.status == 'refunded' %}<span class="text-rose-600 text-xs">↩️ возврат</span>
+        {% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5" class="px-3 py-4 text-center text-slate-500">Начислений пока нет</td></tr>
   {% endfor %}
   </tbody>
 </table>

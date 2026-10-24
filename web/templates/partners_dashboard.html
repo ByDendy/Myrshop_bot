@@ -32,14 +32,18 @@
   </div>
 </div>
 
-<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
   <div class="bg-white rounded-lg p-4 shadow">
     <div class="text-sm text-slate-500">Доступно к выплате</div>
     <div class="text-2xl font-bold">{{ total_balance }} ₽</div>
   </div>
   <div class="bg-white rounded-lg p-4 shadow">
     <div class="text-sm text-slate-500">Заморожено (в арендах)</div>
-    <div class="text-2xl font-bold">{{ total_frozen }} ₽</div>
+    <div class="text-2xl font-bold text-amber-600">{{ total_frozen }} ₽</div>
+  </div>
+  <div class="bg-white rounded-lg p-4 shadow">
+    <div class="text-sm text-slate-500">В запросах на выплату</div>
+    <div class="text-2xl font-bold text-blue-600">{{ pending_payout_amount }} ₽</div>
   </div>
   <div class="bg-white rounded-lg p-4 shadow">
     <div class="text-sm text-slate-500">Выплачено (всё время)</div>
@@ -68,24 +72,18 @@
 <table class="w-full text-sm">
   <thead class="bg-slate-200">
     <tr>
-      <th class="px-3 py-2 text-left">Партнёр</th>
       <th class="px-3 py-2 text-left">Событие</th>
       <th class="px-3 py-2 text-left">Дата</th>
     </tr>
   </thead>
   <tbody>
-  {% for r in recent_events %}
+  {% for e in recent_events %}
     <tr class="border-t">
-      <td class="px-3 py-2">
-        <a href="/partners/{{ r.partner_id }}" class="text-blue-600 hover:underline">
-          {{ r.partner_name }}
-        </a>
-      </td>
-      <td class="px-3 py-2">{{ r.event }}</td>
-      <td class="px-3 py-2 text-xs text-slate-500">{{ r.ts }}</td>
+      <td class="px-3 py-2">{{ e.event }}</td>
+      <td class="px-3 py-2 text-xs text-slate-500">{{ e.ts }}</td>
     </tr>
   {% else %}
-    <tr><td colspan="3" class="px-3 py-6 text-center text-slate-500">Пока нет событий</td></tr>
+    <tr><td colspan="2" class="px-3 py-6 text-center text-slate-500">Пока нет событий</td></tr>
   {% endfor %}
   </tbody>
 </table>
