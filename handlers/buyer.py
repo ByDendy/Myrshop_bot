@@ -2,7 +2,7 @@ from aiogram import Router, F
 from aiogram.types import CallbackQuery
 from sqlalchemy import select, distinct
 from datetime import datetime, timedelta
-from database.models import Account, PaymentMethod, RentalHistory
+from database.models import Account, PaymentMethod, RentalHistory, Customer
 from keyboards.inline import (
     tiers_keyboard, ranks_keyboard, accounts_keyboard,
     rental_keyboard, payment_methods_keyboard,
@@ -155,6 +155,31 @@ async def handle_payment(
     if not account or account.status != "free":
         await callback.answer("Этот аккаунт уже занят!", show_alert=True)
         return
+
+    # ─── Проверка бана ───
+    cust = await session.get(Customer, callback.from_user.id)
+    if cust and cust.is_banned:
+        await callback.answer(
+            f"🚫 Вы заблокированы.\nПричина: {cust.ban_reason or 'не указана'}\n\n"
+            f"Напишите в поддержку {SUPPORT_USERNAME}",
+            show_alert=True,
+        )
+        return
+
+    # ─── Регистрация/обновление покупателя ───
+    if not cust:
+        cust = Customer(
+            telegram_id=callback.from_user.id,
+            username=callback.from_user.username,
+            first_name=callback.from_user.first_name,
+        )
+        session.add(cust)
+    else:
+        if callback.from_user.username:
+            cust.username = callback.from_user.username
+        if callback.from_user.first_name:
+            cust.first_name = callback.from_user.first_name
+    await session.commit()
 
     method = (await session.execute(
         select(PaymentMethod).where(
