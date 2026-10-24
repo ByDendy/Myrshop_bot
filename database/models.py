@@ -121,6 +121,18 @@ class RentalHistory(Base):
     ended_reason: Mapped[str] = mapped_column(String(30), nullable=True)
 
 
+class Customer(Base):
+    __tablename__ = "customers"
+
+    telegram_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    username: Mapped[str] = mapped_column(String(100), nullable=True)
+    first_name: Mapped[str] = mapped_column(String(255), nullable=True)
+    is_banned: Mapped[bool] = mapped_column(Boolean, default=False)
+    ban_reason: Mapped[str] = mapped_column(Text, nullable=True)
+    banned_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class Lot(Base):
     __tablename__ = "lots"
 
@@ -148,15 +160,3 @@ class Setting(Base):
 
     key: Mapped[str] = mapped_column(String(100), primary_key=True)
     value: Mapped[str] = mapped_column(Text, nullable=True)
-
-
-class Customer(Base):
-    __tablename__ = "customers"
-
-    telegram_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    username: Mapped[str] = mapped_column(String(100), nullable=True)
-    first_name: Mapped[str] = mapped_column(String(255), nullable=True)
-    is_banned: Mapped[bool] = mapped_column(Boolean, default=False)
-    ban_reason: Mapped[str] = mapped_column(Text, nullable=True)
-    banned_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
