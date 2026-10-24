@@ -14,6 +14,7 @@ from handlers.payment_checker import payment_checker_loop
 from handlers.reservation_checker import reservation_checker_loop
 from handlers.funpay_watcher import funpay_watcher_loop
 from handlers.lot_manager import lot_manager_loop
+from handlers.avatar_updater import avatar_updater_loop
 from web.server import create_web_app
 
 logging.basicConfig(level=logging.INFO)
@@ -55,6 +56,7 @@ async def main():
     asyncio.create_task(payment_checker_loop(bot))
     asyncio.create_task(reservation_checker_loop(cryptobot))
     # asyncio.create_task(funpay_watcher_loop(bot, funpay))  # отключён из-за бана FunPay
+    asyncio.create_task(avatar_updater_loop(bot))
 
     if FUNPAY_AUTO_LOTS_ENABLED:
         asyncio.create_task(lot_manager_loop(funpay))
