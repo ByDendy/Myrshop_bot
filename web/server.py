@@ -643,3 +643,8 @@ async def customer_unban(request: web.Request):
             await session.commit()
             notifications.push("✅ Покупатель разбанен", f"ID {customer_id}", level="success")
     raise web.HTTPFound(f"/customers/{customer_id}")
+    # Покупатели
+    app.router.add_get("/customers", customers_list)
+    app.router.add_get("/customers/{id}", customer_detail)
+    app.router.add_post("/customers/{id}/ban", customer_ban)
+    app.router.add_post("/customers/{id}/unban", customer_unban)
