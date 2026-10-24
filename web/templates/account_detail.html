@@ -58,6 +58,12 @@
       <div class="flex flex-wrap gap-x-2"><dt class="text-muted">Email:</dt><dd>{{ a.email or "—" }}</dd></div>
       <div class="flex flex-wrap gap-x-2"><dt class="text-muted">Email password:</dt><dd>{{ a.email_password or "—" }}</dd></div>
       <div class="flex flex-wrap gap-x-2 items-center"><dt class="text-muted">Статус:</dt><dd>{{ status_badge(a.status) }}</dd></div>
+      {% if a.buyer_id %}
+      <div class="mt-3 rounded-xl border border-sky-400/40 p-3 flex items-center gap-2 flex-wrap font-sans" style="background:linear-gradient(160deg,rgba(56,189,248,.14),rgba(56,189,248,.03));box-shadow:inset 0 1px 0 rgba(255,255,255,.06)">
+        <i data-lucide="user-round" class="w-4 h-4 text-sky-300"></i><span class="text-muted">Арендатор:</span>
+        <a href="tg://user?id={{ a.buyer_id }}" class="link font-mono">ID: {{ a.buyer_id }}</a>
+      </div>
+      {% endif %}
     </dl>
   </div>
 </div>
@@ -115,7 +121,7 @@
     </div>
   {% else %}
     <div class="p-6 text-center text-muted text-sm">
-      Нет данных о недавних матчах.
+      Нет данных о недавних матчах. Убедитесь, что Riot ID указан верно.
     </div>
   {% endif %}
 </div>

@@ -78,8 +78,6 @@ tailwind.config = { theme: { extend: {
     .qa { @apply card card-hover block; }
     .avatar { @apply w-9 h-9 rounded-full grid place-items-center font-bold text-sm text-ink border border-line; background: linear-gradient(145deg,#4a4640,#2b2825); box-shadow: inset 0 1px 0 rgba(255,255,255,.15), 0 4px 10px -4px #000; }
   }
-  .nav-scroll { scrollbar-width: none; -ms-overflow-style: none; }
-  .nav-scroll::-webkit-scrollbar { display: none; }
   @keyframes rise { from { opacity:0; transform:translateY(10px) scale(.985) } to { opacity:1; transform:none } }
   .rise > * { animation: rise .4s cubic-bezier(.2,.8,.2,1) both; }
   .rise > *:nth-child(2){animation-delay:.05s} .rise > *:nth-child(3){animation-delay:.1s}
@@ -90,7 +88,7 @@ tailwind.config = { theme: { extend: {
 </head>
 <body class="bg-bg text-ink font-sans min-h-screen antialiased">
 <nav class="sticky top-0 z-40 backdrop-blur border-b border-line/70" style="background:linear-gradient(180deg,rgba(40,43,51,.96),rgba(28,25,23,.94));box-shadow:0 10px 28px -14px #000, inset 0 1px 0 rgba(255,255,255,.05)">
-  <div class="max-w-7xl mx-auto px-4 h-14 flex items-center gap-0.5 overflow-x-auto whitespace-nowrap nav-scroll">
+  <div class="max-w-7xl mx-auto px-4 py-1.5 min-h-14 flex flex-wrap items-center gap-0.5">
     <a href="/" class="flex items-center gap-2 font-bold mr-4 shrink-0">
       <span class="w-8 h-8 rounded-lg grid place-items-center" style="background:linear-gradient(180deg,#ff7a50,#d9441f);box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 6px 14px -4px rgba(242,91,58,.7)"><i data-lucide="gamepad-2" class="w-4 h-4 text-white"></i></span>
       <span class="hidden sm:inline">MyrShop</span>
@@ -117,13 +115,16 @@ tailwind.config = { theme: { extend: {
 
 <script>
 lucide.createIcons();
-let lastId = 0;
+// ID последнего показанного уведомления храним в sessionStorage,
+// чтобы при переходах между страницами старые не показывались заново
+let lastId = parseInt(sessionStorage.getItem('lastNotifId') || '0');
 async function pollNotifications() {
   try {
     const r = await fetch(`/api/notifications?since=${lastId}`);
     const events = await r.json();
     for (const e of events) {
       lastId = Math.max(lastId, e.id);
+      sessionStorage.setItem('lastNotifId', lastId);
       showToast(e);
     }
   } catch (err) {}
