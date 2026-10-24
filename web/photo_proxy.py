@@ -5,7 +5,7 @@ from aiogram import Bot
 from aiohttp import web
 
 
-CACHE_SIZE = 200
+CACHE_SIZE = 500
 _cache: "OrderedDict[str, bytes]" = OrderedDict()
 _lock = asyncio.Lock()
 
