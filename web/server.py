@@ -16,6 +16,9 @@ from database.models import (
 from database.session import async_session
 from services.settings_service import get_setting, set_setting
 from services.valorant_service import get_recent_matches
+from services.partner_service import (
+    approve_payout, reject_payout, manual_payout,
+)
 from web import notifications
 from web.photo_proxy import register_photo_route
 
@@ -510,7 +513,12 @@ async def partners_dashboard(request: web.Request):
             )
         )).scalar() or 0
 
-        # Заработок за 30 дней
+        pending_payout_amount = (await session.execute(
+            select(func.coalesce(func.sum(PartnerPayout.amount), 0)).where(
+                PartnerPayout.status == "requested"
+            )
+        )).scalar() or 0
+
         cutoff = datetime.utcnow() - timedelta(days=30)
         revenue_30d = (await session.execute(
             select(func.coalesce(func.sum(PartnerEarning.amount), 0)).where(
@@ -518,7 +526,6 @@ async def partners_dashboard(request: web.Request):
             )
         )).scalar() or 0
 
-        # Балансы
         total_balance = (await session.execute(
             select(func.coalesce(func.sum(Partner.balance), 0))
         )).scalar() or 0
@@ -529,12 +536,10 @@ async def partners_dashboard(request: web.Request):
             select(func.coalesce(func.sum(Partner.total_paid), 0))
         )).scalar() or 0
 
-        # Последние события — берём из web notifications с категорией partner
         recent_events_raw = notifications.get_all(category="partner")[:10]
         recent_events = [
             {
-                "partner_id": 0,
-                "partner_name": "—",
+                "partner_id": 0, "partner_name": "—",
                 "event": e["title"] + (" — " + e["text"] if e["text"] else ""),
                 "ts": e["ts"],
             }
@@ -546,6 +551,7 @@ async def partners_dashboard(request: web.Request):
         accounts_total=accounts_total,
         pending_moderation=pending_moderation,
         pending_payouts=pending_payouts,
+        pending_payout_amount=round(pending_payout_amount),
         revenue_30d=round(revenue_30d),
         total_balance=round(total_balance),
         total_frozen=round(total_frozen),
@@ -565,7 +571,6 @@ async def partners_list(request: web.Request):
             query = query.where(or_(
                 Partner.full_name.ilike(f"%{q}%"),
                 Partner.username.ilike(f"%{q}%"),
-                Partner.telegram_id == int(q) if q.isdigit() else False,
             ))
         if status_filter:
             query = query.where(Partner.status == status_filter)
@@ -573,7 +578,6 @@ async def partners_list(request: web.Request):
 
         partners_raw = (await session.execute(query)).scalars().all()
 
-        # Считаем аккаунты для каждого
         partners_data = []
         for p in partners_raw:
             cnt = (await session.execute(
@@ -614,8 +618,27 @@ async def partner_detail(request: web.Request):
             .limit(20)
         )).scalars().all()
 
+        earnings = (await session.execute(
+            select(PartnerEarning)
+            .where(PartnerEarning.partner_id == partner_id)
+            .order_by(desc(PartnerEarning.created_at))
+            .limit(30)
+        )).scalars().all()
+
+        # Карта аккаунтов для отображения в earnings
+        acc_map = {a.id: a for a in accounts}
+
+        pending_request = (await session.execute(
+            select(PartnerPayout).where(
+                PartnerPayout.partner_id == partner_id,
+                PartnerPayout.status == "requested",
+            ).limit(1)
+        )).scalar_one_or_none()
+
     html = env.get_template("partner_detail.html").render(
         p=partner, accounts=accounts, payouts=payouts,
+        earnings=earnings, acc_map=acc_map,
+        pending_request=pending_request,
     )
     return web.Response(text=html, content_type="text/html")
 
@@ -641,37 +664,29 @@ async def partner_unblock(request: web.Request):
 
 
 async def partner_payout_direct(request: web.Request):
-    """Ручная выплата с карточки партнёра (кнопка «Выплатить»)."""
+    """Ручная выплата с карточки партнёра."""
     partner_id = int(request.match_info["id"])
     bot = request.app["bot"]
 
     async with async_session() as session:
         p = await session.get(Partner, partner_id)
-        if not p or not p.balance or p.balance <= 0:
+        if not p:
             raise web.HTTPFound(f"/partners/{partner_id}")
 
-        amount = p.balance
-        p.balance = 0
-        p.total_paid = (p.total_paid or 0) + amount
-        session.add(PartnerPayout(
-            partner_id=partner_id,
-            amount=amount,
-            status="paid",
-            paid_at=datetime.utcnow(),
-            note="Выплачено из карточки партнёра",
-        ))
-        await session.commit()
+        payout, error = await manual_payout(session, p)
+        if error:
+            raise web.HTTPFound(f"/partners/{partner_id}")
 
         notifications.push(
             "💸 Выплата партнёру",
-            f"{p.full_name} — {amount:.0f} ₽",
+            f"{p.full_name} — {payout.amount:.0f} ₽",
             level="success", category="partner",
         )
 
         await _notify_partner_tg(
             bot, p,
             f"💸 *Выплата выполнена*\n\n"
-            f"Сумма: *{amount:.0f} ₽*\n\n"
+            f"Сумма: *{payout.amount:.0f} ₽*\n\n"
             f"Спасибо за работу! Продолжай в том же духе 🤝"
         )
 
@@ -711,7 +726,6 @@ async def partner_approve(request: web.Request):
         if acc and acc.status == "pending_approval":
             acc.status = "free"
             acc.approved_at = datetime.utcnow()
-            acc.approved_by = 0
             await session.commit()
 
             notifications.push(
@@ -726,8 +740,7 @@ async def partner_approve(request: web.Request):
                     bot, partner,
                     f"✅ *Твой аккаунт одобрен!*\n\n"
                     f"Аккаунт #{acc.id} · {acc.rank}\n"
-                    f"Теперь он в магазине и доступен для аренды.\n\n"
-                    f"Как только кто-то его арендует — ты получишь уведомление."
+                    f"Теперь он в магазине и доступен для аренды."
                 )
 
     raise web.HTTPFound("/partners/approvals")
@@ -838,7 +851,7 @@ async def partner_password_reject(request: web.Request):
                     f"❌ *Пароль не принят*\n\n"
                     f"Аккаунт #{acc.id} · {acc.rank}\n\n"
                     f"*Причина:* {reason}\n\n"
-                    f"Смени пароль правильно и отправь заново через «Мои аккаунты» → «Сменить пароль»."
+                    f"Смени пароль правильно и отправь заново."
                 )
 
     raise web.HTTPFound("/partners/passwords")
@@ -869,24 +882,22 @@ async def partner_payout_pay(request: web.Request):
 
     async with async_session() as session:
         po = await session.get(PartnerPayout, po_id)
-        if po and po.status == "requested":
-            po.status = "paid"
-            po.paid_at = datetime.utcnow()
-            if note:
-                po.note = note
+        if not po:
+            raise web.HTTPFound("/partners/payouts")
 
+        if note:
+            po.note = note
+
+        success = await approve_payout(session, po)
+
+        if success:
             partner = await session.get(Partner, po.partner_id)
-            if partner:
-                partner.balance = max(0, (partner.balance or 0) - po.amount)
-                partner.total_paid = (partner.total_paid or 0) + po.amount
-                await _notify_partner_tg(
-                    bot, partner,
-                    f"💸 *Выплата выполнена*\n\n"
-                    f"Сумма: *{po.amount:.0f} ₽*\n"
-                    f"Спасибо за работу!"
-                )
-
-            await session.commit()
+            await _notify_partner_tg(
+                bot, partner,
+                f"💸 *Выплата выполнена*\n\n"
+                f"Сумма: *{po.amount:.0f} ₽*\n\n"
+                f"Спасибо за работу!"
+            )
 
             notifications.push(
                 "💸 Выплата партнёру",
@@ -905,23 +916,20 @@ async def partner_payout_reject(request: web.Request):
 
     async with async_session() as session:
         po = await session.get(PartnerPayout, po_id)
-        if po and po.status == "requested":
-            po.status = "rejected"
-            po.note = reason
+        if not po:
+            raise web.HTTPFound("/partners/payouts")
 
+        success = await reject_payout(session, po, reason)
+
+        if success:
             partner = await session.get(Partner, po.partner_id)
-            if partner:
-                # Возвращаем деньги на баланс
-                partner.balance = (partner.balance or 0) + po.amount
-                await _notify_partner_tg(
-                    bot, partner,
-                    f"❌ *Запрос на выплату отклонён*\n\n"
-                    f"Сумма: {po.amount:.0f} ₽\n"
-                    f"Причина: {reason}\n\n"
-                    f"Деньги возвращены на баланс. Проверь реквизиты."
-                )
-
-            await session.commit()
+            await _notify_partner_tg(
+                bot, partner,
+                f"❌ *Запрос на выплату отклонён*\n\n"
+                f"Сумма: {po.amount:.0f} ₽\n"
+                f"*Причина:* {reason}\n\n"
+                f"Деньги возвращены на баланс. Проверь реквизиты и запроси снова."
+            )
 
             notifications.push(
                 "❌ Выплата отклонена",
@@ -946,8 +954,6 @@ def create_web_app(bot):
     app.router.add_get("/logout", logout)
 
     app.router.add_get("/", dashboard)
-
-    # Аккаунты
     app.router.add_get("/accounts", accounts_list)
     app.router.add_get("/accounts/add", account_add_page)
     app.router.add_post("/accounts/add", account_add_page)
@@ -956,22 +962,16 @@ def create_web_app(bot):
     app.router.add_post("/accounts/{id}/edit", account_edit_page)
     app.router.add_post("/accounts/{id}/delete", account_delete)
 
-    # Смена паролей (мои)
     app.router.add_get("/password-change", awaiting_list)
     app.router.add_post("/password-change/{id}/done", mark_password_changed)
 
-    # Экспорт
     app.router.add_get("/export", export_page)
-
-    # Уведомления
     app.router.add_get("/api/notifications", notifications_api)
     app.router.add_get("/notifications", notifications_page)
 
-    # Настройки
     app.router.add_get("/settings", settings_page)
     app.router.add_post("/settings", settings_page)
 
-    # Партнёры
     app.router.add_get("/partners", partners_dashboard)
     app.router.add_get("/partners/list", partners_list)
     app.router.add_get("/partners/approvals", partners_approvals)
