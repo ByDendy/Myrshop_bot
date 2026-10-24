@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Покупатель #{{ c.telegram_id }}{% endblock %}
+{% block content %}
+<a href="/customers" class="text-sm text-muted hover:text-accent inline-flex items-center gap-1"><i data-lucide="arrow-left" class="w-4 h-4"></i>к списку</a>
+
+<div class="flex items-start justify-between mt-2 mb-6 flex-wrap gap-3">
+  <div class="flex items-center gap-4">
+    <span class="avatar !w-14 !h-14 !text-xl">{{ (c.first_name or '?')[0]|upper }}</span>
+    <div>
+      <h1 class="text-2xl font-bold flex items-center gap-2 flex-wrap">{{ c.first_name or "Покупатель" }}
+        {% if c.username %}<a href="https://t.me/{{ c.username }}" target="_blank" class="link text-base font-normal inline-flex items-center gap-1">@{{ c.username }}<i data-lucide="external-link" class="w-3.5 h-3.5"></i></a>{% endif %}
+      </h1>
+      <div class="text-sm text-muted mt-1">TG ID: <span class="font-mono text-ink">{{ c.telegram_id }}</span>{% if c.created_at %} · с {{ c.created_at.strftime("%d.%m.%Y") }}{% endif %}</div>
+    </div>
+  </div>
+
+  {% if c.is_banned %}
+    <div class="text-right">
+      <span class="badge b-pw mb-1"><i data-lucide="ban" class="w-3 h-3"></i>Забанен</span>
+      <div class="text-xs text-muted mb-2">{{ c.ban_reason or "—" }}</div>
+      <form method="post" action="/customers/{{ c.telegram_id }}/unban">
+        <button class="btn btn-ok btn-sm"><i data-lucide="check" class="w-4 h-4"></i>Разбанить</button>
+      </form>
+    </div>
+  {% else %}
+    <button onclick="document.getElementById('ban-form').classList.toggle('hidden')" class="btn btn-danger"><i data-lucide="ban" class="w-4 h-4"></i>Забанить</button>
+  {% endif %}
+</div>
+
+<div id="ban-form" class="hidden alert alert-bad mb-6">
+  <form method="post" action="/customers/{{ c.telegram_id }}/ban" class="flex gap-2 flex-wrap">
+    <input name="reason" required placeholder="Причина бана (увидит покупатель)" class="input flex-1 min-w-[14rem]">
+    <button class="btn btn-danger"><i data-lucide="ban" class="w-4 h-4"></i>Забанить</button>
+  </form>
+</div>
+
+<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6 rise">
+  <div class="stat stat-hot"><div class="label">Всего потратил</div><div class="num text-2xl text-accent glow-text">{{ total_spent }} ₽</div></div>
+  <div class="stat"><div class="label">Аренд</div><div class="num text-2xl">{{ total_rentals }}</div></div>
+  <div class="stat"><div class="label">Всего часов</div><div class="num text-2xl">{{ total_hours }}</div></div>
+  <div class="stat"><div class="label">Любимый ранг</div><div class="text-lg font-bold truncate">{{ favorite_rank }}</div></div>
+</div>
+
+<h2 class="text-lg font-semibold mb-3 flex items-center gap-2"><span class="chip !w-8 !h-8"><i data-lucide="calendar-days" class="w-4 h-4"></i></span>Активность за 30 дней</h2>
+<div class="card mb-6">
+  <div class="flex flex-wrap gap-1.5">
+    {% for d in activity_days %}
+      <div title="{{ d.date }}: {{ d.count }} аренд" class="w-8 h-8 rounded-md border border-line/40 transition hover:scale-110
+        {% if d.count == 0 %}bg-bg shadow-[inset_0_2px_4px_rgba(0,0,0,.6)]
+        {% elif d.count == 1 %}bg-emerald-700 shadow-[0_0_8px_rgba(4,120,87,.5)]
+        {% elif d.count <= 3 %}bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,.55)]
+        {% else %}bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,.7)]{% endif %}"></div>
+    {% endfor %}
+  </div>
+  <div class="flex gap-2 text-xs text-muted mt-4 items-center">
+    <span>Меньше</span>
+    <div class="w-4 h-4 rounded bg-bg border border-line/40"></div>
+    <div class="w-4 h-4 rounded bg-emerald-700"></div>
+    <div class="w-4 h-4 rounded bg-emerald-500"></div>
+    <div class="w-4 h-4 rounded bg-emerald-400"></div>
+    <span>Больше</span>
+  </div>
+</div>
+
+<h2 class="text-lg font-semibold mb-3">История аренд</h2>
+<div class="card p-0 overflow-hidden"><div class="overflow-x-auto">
+<table class="tbl">
+  <thead><tr><th>Начало</th><th>Аккаунт</th><th>Часы</th><th class="!text-right">Сумма</th><th>Способ</th><th>Окончание</th></tr></thead>
+  <tbody>
+  {% for rh, rank in history %}
+    <tr>
+      <td class="font-mono">{{ rh.started_at.strftime("%d.%m %H:%M") }}</td>
+      <td><a href="/accounts/{{ rh.account_id }}" class="link">#{{ rh.account_id }} · {{ rank }}</a></td>
+      <td class="font-mono">{{ rh.hours }} ч</td>
+      <td class="text-right font-mono text-accent">{{ rh.amount }} ₽</td>
+      <td>{{ rh.method or "—" }}</td>
+      <td class="font-mono text-muted">{% if rh.ended_at %}{{ rh.ended_at.strftime("%d.%m %H:%M") }} ({{ rh.ended_reason }}){% else %}—{% endif %}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="py-6 text-center text-muted">Аренд не было</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div></div>
+{% endblock %}

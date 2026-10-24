@@ -2,38 +2,43 @@
 {% block content %}
 <div class="flex items-center justify-between mb-6">
   <h1 class="text-2xl font-bold">Дашборд</h1>
-  <a href="/accounts/add" class="btn btn-primary"><i data-lucide="plus" class="w-4 h-4"></i>Добавить аккаунт</a>
+  <a href="/accounts/add" class="btn btn-primary">+ Добавить аккаунт</a>
 </div>
 
-<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3 rise">
-  <div class="stat"><div class="flex justify-between items-start mb-2"><div class="label">Всего аккаунтов</div><span class="chip chip-mute"><i data-lucide="layers" class="w-4 h-4"></i></span></div><div class="num text-3xl">{{ accounts_total }}</div></div>
-  <div class="stat stat-hot"><div class="flex justify-between items-start mb-2"><div class="label">Активных аренд</div><span class="chip"><i data-lucide="flame" class="w-4 h-4"></i></span></div><div class="num text-4xl text-accent glow-text">{{ active }}</div></div>
-  <div class="stat"><div class="flex justify-between items-start mb-2"><div class="label">Ждут смены пароля</div><span class="chip chip-mute"><i data-lucide="key-round" class="w-4 h-4 text-warn"></i></span></div><div class="num text-3xl text-warn">{{ awaiting }}</div></div>
-  <div class="stat"><div class="flex justify-between items-start mb-2"><div class="label">Всего аренд</div><span class="chip chip-mute"><i data-lucide="repeat" class="w-4 h-4"></i></span></div><div class="num text-3xl">{{ total_rentals }}</div></div>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+  <div class="card"><div class="text-sm text-muted mb-1">Всего аккаунтов</div><div class="text-3xl font-bold">{{ accounts_total }}</div></div>
+  <div class="card border-accent/50"><div class="text-sm text-muted mb-1">Активных аренд</div><div class="text-3xl font-bold text-accent">{{ active }}</div></div>
+  <div class="card"><div class="text-sm text-muted mb-1">Ждут смены пароля</div><div class="text-3xl font-bold text-amber-500">{{ awaiting }}</div></div>
+  <div class="card"><div class="text-sm text-muted mb-1">Всего аренд</div><div class="text-3xl font-bold">{{ total_rentals }}</div></div>
 </div>
 
-<div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-8 rise">
-  <div class="stat"><div class="flex justify-between items-start mb-2"><div class="label">Общее время аренды</div><span class="chip chip-mute"><i data-lucide="timer" class="w-4 h-4"></i></span></div><div class="num text-3xl">{{ total_hours }} <span class="text-muted text-xl">ч</span></div></div>
-  <div class="stat stat-hot"><div class="flex justify-between items-start mb-2"><div class="label">Выручка</div><span class="chip"><i data-lucide="wallet" class="w-4 h-4"></i></span></div><div class="num text-4xl text-accent glow-text">{{ total_revenue }} ₽</div></div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+  <div class="card"><div class="text-sm text-muted mb-1">Общее время аренды</div><div class="text-3xl font-bold">{{ total_hours }} ч</div></div>
+  <div class="card border-accent/50"><div class="text-sm text-muted mb-1">Выручка</div><div class="text-3xl font-bold text-accent">{{ total_revenue }} ₽</div></div>
 </div>
 
-<h2 class="text-lg font-semibold mb-3 flex items-center gap-2"><span class="chip !w-8 !h-8"><i data-lucide="history" class="w-4 h-4"></i></span>Последние аренды</h2>
-<div class="card p-0 overflow-hidden"><div class="overflow-x-auto">
-<table class="tbl">
-  <thead><tr><th>Аккаунт</th><th>Часы</th><th>Сумма</th><th>Способ</th><th>Начало</th></tr></thead>
-  <tbody>
+<h2 class="text-lg font-bold mb-3">Последние аренды</h2>
+<div class="card p-0 overflow-hidden">
+<table class="w-full text-sm text-left">
+  <thead class="bg-surface border-b border-line">
+    <tr><th class="px-4 py-3">Аккаунт</th><th class="px-4 py-3">Часы</th><th class="px-4 py-3">Сумма</th><th class="px-4 py-3">Способ</th><th class="px-4 py-3">Начало</th></tr>
+  </thead>
+  <tbody class="divide-y divide-line/50">
   {% for r in recent %}
-    <tr>
-      <td>{% set a = acc_map.get(r.account_id) %}
-        {% if a %}<a href="/accounts/{{ a.id }}" class="link">#{{ a.id }} {{ a.rank }}</a>{% else %}—{% endif %}</td>
-      <td class="font-mono">{{ r.hours }} ч</td>
-      <td class="font-mono text-accent">{{ r.amount }} ₽</td>
-      <td>{{ r.method }}</td>
-      <td class="font-mono text-muted">{{ r.started_at.strftime("%d.%m %H:%M") }}</td>
+    <tr class="hover:bg-surface/50 transition">
+      <td class="px-4 py-3">
+        {% set a = acc_map.get(r.account_id) %}
+        {% if a %}<a href="/accounts/{{ a.id }}" class="text-accent hover:underline">#{{ a.id }} {{ a.rank }}</a>{% else %}—{% endif %}
+      </td>
+      <td class="px-4 py-3 font-mono">{{ r.hours }} ч</td>
+      <td class="px-4 py-3 font-mono text-accent">{{ r.amount }} ₽</td>
+      <td class="px-4 py-3">{{ r.method }}</td>
+      <td class="px-4 py-3 font-mono text-muted">{{ r.started_at.strftime("%d.%m %H:%M") }}</td>
     </tr>
   {% else %}
-    <tr><td colspan="5" class="py-6 text-center text-muted">Пока нет аренд</td></tr>
+    <tr><td colspan="5" class="px-4 py-6 text-center text-muted">Пока нет аренд</td></tr>
   {% endfor %}
   </tbody>
-</table></div></div>
+</table>
+</div>
 {% endblock %}

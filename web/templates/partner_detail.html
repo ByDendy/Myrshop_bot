@@ -1,125 +1,163 @@
 {% extends "base.html" %}
-{% from "_macros.html" import status_badge %}
 {% block title %}{{ p.full_name or 'Партнёр' }}{% endblock %}
 {% block content %}
-<a href="/partners/list" class="text-sm text-muted hover:text-accent inline-flex items-center gap-1"><i data-lucide="arrow-left" class="w-4 h-4"></i>к списку</a>
+<a href="/partners/list" class="text-accent hover:underline text-sm mb-2 inline-block">← к списку</a>
 
-<div class="flex items-center justify-between mt-2 mb-4 flex-wrap gap-3">
-  <div class="flex items-center gap-4">
-    <span class="avatar !w-14 !h-14 !text-xl">{{ (p.full_name or '?')[0]|upper }}</span>
-    <div>
-      <h1 class="text-2xl font-bold">{{ p.full_name or 'Партнёр' }}</h1>
-      <div class="flex items-center gap-x-3 gap-y-1 flex-wrap text-xs text-muted">
-        {% if p.username %}<a href="https://t.me/{{ p.username }}" target="_blank" class="link inline-flex items-center gap-1 text-sm">@{{ p.username }}<i data-lucide="external-link" class="w-3.5 h-3.5"></i></a>{% endif %}
-        <span class="font-mono">TG ID: {{ p.telegram_id }}</span>
-        <span class="font-mono">с {{ p.created_at.strftime('%d.%m.%Y') }}</span>
-        {% if p.status == 'active' %}<span class="badge b-free">активен</span>{% else %}<span class="badge b-pw">заблокирован</span>{% endif %}
-      </div>
-    </div>
+<div class="flex items-center justify-between mt-1 mb-4 flex-wrap gap-3">
+  <div>
+    <h1 class="text-2xl font-bold">{{ p.full_name or 'Партнёр' }}</h1>
+    {% if p.username %}
+      <a href="https://t.me/{{ p.username }}" target="_blank" class="text-accent hover:underline text-sm">@{{ p.username }} ↗</a>
+    {% endif %}
+    <span class="text-xs text-muted ml-2">TG ID: {{ p.telegram_id }}</span>
+    <span class="text-xs text-muted ml-2">с {{ p.created_at.strftime('%d.%m.%Y') }}</span>
   </div>
   <div class="flex gap-2 flex-wrap">
     {% if p.status == 'active' %}
       <form method="post" action="/partners/{{ p.id }}/block" onsubmit="return confirm('Заблокировать партнёра?')">
-        <button class="btn btn-danger"><i data-lucide="ban" class="w-4 h-4"></i>Заблокировать</button></form>
+        <button class="btn !bg-rose-600 hover:!bg-rose-500 text-white !py-1.5 text-sm">🚫 Заблокировать</button>
+      </form>
     {% else %}
       <form method="post" action="/partners/{{ p.id }}/unblock">
-        <button class="btn btn-ok"><i data-lucide="check" class="w-4 h-4"></i>Разблокировать</button></form>
+        <button class="btn !bg-emerald-600 hover:!bg-emerald-500 text-white !py-1.5 text-sm">✅ Разблокировать</button>
+      </form>
     {% endif %}
     {% if p.balance and p.balance > 0 %}
       <form method="post" action="/partners/{{ p.id }}/payout" onsubmit="return confirm('Выплатить {{ p.balance }} ₽?')">
-        <button class="btn btn-primary"><i data-lucide="wallet" class="w-4 h-4"></i>Выплатить {{ p.balance }} ₽</button></form>
+        <button class="btn !bg-emerald-600 hover:!bg-emerald-500 text-white !py-1.5 text-sm">💰 Выплатить {{ p.balance }} ₽</button>
+      </form>
     {% endif %}
   </div>
 </div>
 
 {% if pending_request %}
-<div class="alert alert-warn mb-4 flex items-center gap-2 flex-wrap"><i data-lucide="hourglass" class="w-4 h-4"></i>
-  Есть активный запрос на выплату <b class="font-mono">{{ pending_request.amount }} ₽</b>
-  от {{ pending_request.requested_at.strftime('%d.%m %H:%M') }} — <a href="/partners/payouts" class="underline font-semibold">обработать</a>
+<div class="bg-amber-900/30 text-amber-300 p-3 rounded mb-4 border border-amber-500/30 text-sm">
+  ⏳ Есть активный запрос на выплату <b>{{ pending_request.amount }} ₽</b> от {{ pending_request.requested_at.strftime('%d.%m %H:%M') }} — 
+  <a href="/partners/payouts" class="underline">обработать</a>
 </div>
 {% endif %}
 
-<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 rise">
-  <div class="stat"><div class="label">Доступно</div><div class="num text-2xl">{{ p.balance }} ₽</div></div>
-  <div class="stat"><div class="label">Заморожено</div><div class="num text-2xl text-warn">{{ p.frozen_balance }} ₽</div></div>
-  <div class="stat stat-hot"><div class="label">Заработал</div><div class="num text-2xl text-accent glow-text">{{ p.total_earned }} ₽</div></div>
-  <div class="stat"><div class="label">Выплачено</div><div class="num text-2xl">{{ p.total_paid }} ₽</div></div>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+  <div class="card"><div class="text-xs text-muted mb-1">Доступно</div><div class="text-2xl font-bold">{{ p.balance }} ₽</div></div>
+  <div class="card"><div class="text-xs text-muted mb-1">Заморожено</div><div class="text-2xl font-bold text-amber-500">{{ p.frozen_balance }} ₽</div></div>
+  <div class="card"><div class="text-xs text-muted mb-1">Заработал</div><div class="text-2xl font-bold text-emerald-500">{{ p.total_earned }} ₽</div></div>
+  <div class="card"><div class="text-xs text-muted mb-1">Выплачено</div><div class="text-2xl font-bold">{{ p.total_paid }} ₽</div></div>
 </div>
 
-<div class="card mb-6 flex items-center justify-between gap-3 flex-wrap">
-  <div class="min-w-0">
-    <div class="label flex items-center gap-1.5"><i data-lucide="credit-card" class="w-3.5 h-3.5"></i>Реквизиты для выплат</div>
-    <div id="pd" class="font-mono text-sm break-all">{{ p.payment_details or '— не указаны —' }}</div>
-  </div>
-  {% if p.payment_details %}
-  <button type="button" class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('pd').innerText)"><i data-lucide="copy" class="w-4 h-4"></i>Копировать</button>
-  {% endif %}
+<div class="card p-4 mb-6">
+  <div class="text-sm text-muted mb-1">💳 Реквизиты для выплат</div>
+  <div class="font-mono text-sm">{{ p.payment_details or '— не указаны —' }}</div>
 </div>
 
-<h2 class="text-lg font-semibold mb-3 flex items-center gap-2"><i data-lucide="folder" class="w-5 h-5 text-accent"></i>Аккаунты партнёра <span class="text-muted font-mono text-sm">({{ accounts|length }})</span></h2>
-<div class="card p-0 overflow-hidden mb-6"><div class="overflow-x-auto">
-<table class="tbl">
-  <thead><tr><th>#</th><th>Ранг</th><th>Логин</th><th>Статус</th><th class="!text-right">Цены</th><th></th></tr></thead>
-  <tbody>
-  {% for a in accounts %}
+<h2 class="text-lg font-bold mb-2">📁 Аккаунты партнёра ({{ accounts|length }})</h2>
+<div class="card p-0 overflow-hidden mb-6">
+<table class="w-full text-sm text-left">
+  <thead class="bg-surface border-b border-line">
     <tr>
-      <td class="font-mono text-muted">{{ a.id }}</td>
-      <td class="font-semibold">{{ a.rank }}</td>
-      <td class="font-mono text-xs">{{ a.login }}</td>
-      <td>{{ status_badge(a.status) }}</td>
-      <td class="text-right font-mono text-xs text-accent">{{ a.price_3h|round(0)|int }} / {{ a.price_6h|round(0)|int }} / {{ a.price_12h|round(0)|int }}</td>
-      <td class="text-right"><a href="/accounts/{{ a.id }}" class="link text-xs inline-flex items-center gap-1">открыть<i data-lucide="chevron-right" class="w-4 h-4"></i></a></td>
+      <th class="px-4 py-3">#</th>
+      <th class="px-4 py-3">Ранг</th>
+      <th class="px-4 py-3">Логин</th>
+      <th class="px-4 py-3">Статус</th>
+      <th class="px-4 py-3 text-right">Цены</th>
+      <th class="px-4 py-3"></th>
+    </tr>
+  </thead>
+  <tbody class="divide-y divide-line/50">
+  {% for a in accounts %}
+    <tr class="hover:bg-surface/50 transition">
+      <td class="px-4 py-3">{{ a.id }}</td>
+      <td class="px-4 py-3">{{ a.rank }}</td>
+      <td class="px-4 py-3 font-mono text-xs">{{ a.login }}</td>
+      <td class="px-4 py-3 text-xs">
+        {% if a.status == 'free' %}<span class="text-emerald-500">🟢 свободен</span>
+        {% elif a.status == 'rented' %}<span class="text-blue-500">🟠 аренда</span>
+        {% elif a.status == 'reserved' %}<span class="text-amber-500">🟡 бронь</span>
+        {% elif a.status == 'pending_approval' %}<span class="text-amber-500">⏳ на проверке</span>
+        {% elif a.status == 'rejected' %}<span class="text-rose-500">❌ отклонён</span>
+        {% elif a.status == 'awaiting_review' %}<span class="text-orange-500">🔑 ждёт пароля</span>
+        {% elif a.status == 'awaiting_approval' %}<span class="text-blue-500">🔍 пароль</span>
+        {% endif %}
+      </td>
+      <td class="px-4 py-3 text-right text-xs font-mono">
+        {{ a.price_3h|round(0)|int }} / {{ a.price_6h|round(0)|int }} / {{ a.price_12h|round(0)|int }}
+      </td>
+      <td class="px-4 py-3 text-right">
+        <a href="/accounts/{{ a.id }}" class="text-accent hover:underline text-xs">открыть</a>
+      </td>
     </tr>
   {% else %}
-    <tr><td colspan="6" class="py-6 text-center text-muted">Нет аккаунтов</td></tr>
+    <tr><td colspan="6" class="px-4 py-4 text-center text-muted">Нет аккаунтов</td></tr>
   {% endfor %}
   </tbody>
-</table></div></div>
+</table>
+</div>
 
-<h2 class="text-lg font-semibold mb-3 flex items-center gap-2"><i data-lucide="coins" class="w-5 h-5 text-accent"></i>История начислений <span class="text-muted text-sm font-normal">(30 последних)</span></h2>
-<div class="card p-0 overflow-hidden mb-6"><div class="overflow-x-auto">
-<table class="tbl">
-  <thead><tr><th>Дата</th><th>Аккаунт</th><th class="!text-right">Партнёру</th><th class="!text-right">Платформе</th><th>Статус</th></tr></thead>
-  <tbody>
+<h2 class="text-lg font-bold mb-2">💵 История начислений (30 последних)</h2>
+<div class="card p-0 overflow-hidden mb-6">
+<table class="w-full text-sm text-left">
+  <thead class="bg-surface border-b border-line">
+    <tr>
+      <th class="px-4 py-3">Дата</th>
+      <th class="px-4 py-3">Аккаунт</th>
+      <th class="px-4 py-3 text-right">Партнёру</th>
+      <th class="px-4 py-3 text-right">Платформе</th>
+      <th class="px-4 py-3">Статус</th>
+    </tr>
+  </thead>
+  <tbody class="divide-y divide-line/50">
   {% for e in earnings %}
     {% set acc = acc_map.get(e.account_id) %}
     <tr>
-      <td class="font-mono text-xs text-muted">{{ e.created_at.strftime('%d.%m %H:%M') }}</td>
-      <td class="text-xs">{% if acc %}<a href="/accounts/{{ acc.id }}" class="link">#{{ acc.id }} {{ acc.rank }}</a>{% else %}#{{ e.account_id }}{% endif %}</td>
-      <td class="text-right font-mono text-ok">{{ e.amount }} ₽</td>
-      <td class="text-right font-mono text-xs text-muted">{{ e.platform_amount }} ₽</td>
-      <td>
-        {% if e.status == 'frozen' %}<span class="badge b-blue"><i data-lucide="snowflake" class="w-3 h-3"></i>заморожено</span>
-        {% elif e.status == 'available' %}<span class="badge b-rent"><i data-lucide="wallet" class="w-3 h-3"></i>доступно</span>
-        {% elif e.status == 'paid' %}<span class="badge b-free"><i data-lucide="check" class="w-3 h-3"></i>выплачено</span>
-        {% elif e.status == 'refunded' %}<span class="badge b-pw"><i data-lucide="undo-2" class="w-3 h-3"></i>возврат</span>{% endif %}
+      <td class="px-4 py-3 text-xs">{{ e.created_at.strftime('%d.%m %H:%M') }}</td>
+      <td class="px-4 py-3 text-xs">
+        {% if acc %}
+          <a href="/accounts/{{ acc.id }}" class="text-accent hover:underline">#{{ acc.id }} {{ acc.rank }}</a>
+        {% else %}#{{ e.account_id }}{% endif %}
+      </td>
+      <td class="px-4 py-3 text-right font-mono text-emerald-500">{{ e.amount }} ₽</td>
+      <td class="px-4 py-3 text-right font-mono text-xs text-muted">{{ e.platform_amount }} ₽</td>
+      <td class="px-4 py-3">
+        {% if e.status == 'frozen' %}<span class="text-amber-500 text-xs">🧊 заморожено</span>
+        {% elif e.status == 'available' %}<span class="text-blue-500 text-xs">💰 доступно</span>
+        {% elif e.status == 'paid' %}<span class="text-emerald-500 text-xs">✅ выплачено</span>
+        {% elif e.status == 'refunded' %}<span class="text-rose-500 text-xs">↩️ возврат</span>
+        {% endif %}
       </td>
     </tr>
   {% else %}
-    <tr><td colspan="5" class="py-6 text-center text-muted">Начислений пока нет</td></tr>
+    <tr><td colspan="5" class="px-4 py-4 text-center text-muted">Начислений пока нет</td></tr>
   {% endfor %}
   </tbody>
-</table></div></div>
+</table>
+</div>
 
-<h2 class="text-lg font-semibold mb-3 flex items-center gap-2"><i data-lucide="banknote" class="w-5 h-5 text-accent"></i>История выплат</h2>
-<div class="card p-0 overflow-hidden"><div class="overflow-x-auto">
-<table class="tbl">
-  <thead><tr><th>Дата</th><th class="!text-right">Сумма</th><th>Статус</th><th>Комментарий</th></tr></thead>
-  <tbody>
+<h2 class="text-lg font-bold mb-2">💸 История выплат</h2>
+<div class="card p-0 overflow-hidden">
+<table class="w-full text-sm text-left">
+  <thead class="bg-surface border-b border-line">
+    <tr>
+      <th class="px-4 py-3">Дата</th>
+      <th class="px-4 py-3 text-right">Сумма</th>
+      <th class="px-4 py-3">Статус</th>
+      <th class="px-4 py-3">Комментарий</th>
+    </tr>
+  </thead>
+  <tbody class="divide-y divide-line/50">
   {% for po in payouts %}
     <tr>
-      <td class="font-mono text-xs text-muted">{{ po.requested_at.strftime('%d.%m %H:%M') }}</td>
-      <td class="text-right font-mono font-bold">{{ po.amount }} ₽</td>
-      <td>
-        {% if po.status == 'paid' %}<span class="badge b-free"><i data-lucide="check" class="w-3 h-3"></i>выплачено</span>
-        {% elif po.status == 'requested' %}<span class="badge b-res"><i data-lucide="hourglass" class="w-3 h-3"></i>в обработке</span>
-        {% else %}<span class="badge b-pw"><i data-lucide="x" class="w-3 h-3"></i>отклонено</span>{% endif %}
+      <td class="px-4 py-3">{{ po.requested_at.strftime('%d.%m %H:%M') }}</td>
+      <td class="px-4 py-3 text-right font-mono">{{ po.amount }} ₽</td>
+      <td class="px-4 py-3">
+        {% if po.status == 'paid' %}<span class="text-emerald-500">✅ выплачено</span>
+        {% elif po.status == 'requested' %}<span class="text-amber-500">⏳ в обработке</span>
+        {% else %}<span class="text-rose-500">❌ отклонено</span>{% endif %}
       </td>
-      <td class="text-xs text-muted !whitespace-normal">{{ po.note or '—' }}</td>
+      <td class="px-4 py-3 text-xs text-muted">{{ po.note or '—' }}</td>
     </tr>
   {% else %}
-    <tr><td colspan="4" class="py-6 text-center text-muted">Выплат пока не было</td></tr>
+    <tr><td colspan="4" class="px-4 py-4 text-center text-muted">Выплат пока не было</td></tr>
   {% endfor %}
   </tbody>
-</table></div></div>
+</table>
+</div>
 {% endblock %}

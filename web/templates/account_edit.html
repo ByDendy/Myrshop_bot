@@ -1,62 +1,62 @@
 {% extends "base.html" %}
 {% block title %}Редактировать #{{ a.id }}{% endblock %}
 {% block content %}
-<a href="/accounts/{{ a.id }}" class="text-sm text-muted hover:text-accent inline-flex items-center gap-1"><i data-lucide="arrow-left" class="w-4 h-4"></i>к аккаунту</a>
-<h1 class="text-2xl font-bold mt-1 mb-4">Редактировать #{{ a.id }}</h1>
-{% if error %}<p class="mb-3 px-4 py-2 rounded-lg border border-bad/50 bg-bad/10 text-bad text-sm">{{ error }}</p>{% endif %}
+<a href="/accounts/{{ a.id }}" class="text-sm text-muted hover:text-accent mb-2 inline-block">← к аккаунту</a>
+<h1 class="text-2xl font-bold mb-4">Редактировать #{{ a.id }}</h1>
+{% if error %}<p class="mb-3 px-4 py-2 rounded border border-rose-500/50 bg-rose-900/20 text-rose-400 text-sm">{{ error }}</p>{% endif %}
 
-<form method="post" enctype="multipart/form-data" class="card !p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+<form method="post" enctype="multipart/form-data" class="card p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
   <div class="md:col-span-2">
-    <div class="label">Тип аккаунта</div>
+    <div class="text-sm text-muted mb-2">Тип аккаунта</div>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
       <label class="cursor-pointer">
         <input type="radio" name="tier" value="standard" {% if a.tier != 'premium' %}checked{% endif %} class="peer sr-only">
-        <div class="tier peer-checked:border-accent peer-checked:shadow-glow peer-focus-visible:ring-2 peer-focus-visible:ring-accent/60">
-          <span class="chip chip-mute"><i data-lucide="shield-check" class="w-4 h-4 text-ok"></i></span>
+        <div class="p-3 rounded-lg border border-line peer-checked:border-accent peer-checked:bg-accent/10 transition flex items-center gap-3">
+          <span class="text-emerald-500 text-xl">🛡️</span>
           <div><div class="font-semibold">Standard</div><div class="text-xs text-muted">Обычный аккаунт</div></div>
         </div>
       </label>
       <label class="cursor-pointer">
         <input type="radio" name="tier" value="premium" {% if a.tier == 'premium' %}checked{% endif %} class="peer sr-only">
-        <div class="tier peer-checked:border-violet-400 peer-checked:shadow-[0_0_0_1px_rgba(167,139,250,.5),0_0_22px_rgba(139,92,246,.3)] peer-focus-visible:ring-2 peer-focus-visible:ring-violet-400/60">
-          <span class="chip chip-mute"><i data-lucide="gem" class="w-4 h-4 text-violet-300"></i></span>
+        <div class="p-3 rounded-lg border border-line peer-checked:border-purple-500 peer-checked:bg-purple-900/20 transition flex items-center gap-3">
+          <span class="text-purple-400 text-xl">💎</span>
           <div><div class="font-semibold">Premium</div><div class="text-xs text-muted">Со скинами</div></div>
         </div>
       </label>
     </div>
   </div>
-  <div><label class="label">Riot логин</label><input name="login" required value="{{ a.login }}" class="input font-mono"></div>
-  <div><label class="label">Riot пароль</label><input name="password" required value="{{ a.password }}" class="input font-mono"></div>
-  <div><label class="label">Riot ID (для трекера)</label><input name="riot_id" value="{{ a.riot_id or '' }}" placeholder="Player#RU1" class="input font-mono"></div>
-  <div><label class="label">Ранг</label><input name="rank" required value="{{ a.rank }}" class="input"></div>
-  <div><label class="label">Email</label><input name="email" value="{{ a.email or '' }}" class="input font-mono"></div>
-  <div><label class="label">Пароль от email</label><input name="email_password" value="{{ a.email_password or '' }}" class="input font-mono"></div>
+  <div><label class="text-sm text-muted">Riot логин</label><input name="login" required value="{{ a.login }}" class="input font-mono"></div>
+  <div><label class="text-sm text-muted">Riot пароль</label><input name="password" required value="{{ a.password }}" class="input font-mono"></div>
+  <div><label class="text-sm text-muted">Riot ID (для трекера)</label><input name="riot_id" value="{{ a.riot_id or '' }}" placeholder="Player#RU1" class="input font-mono"></div>
+  <div><label class="text-sm text-muted">Ранг</label><input name="rank" required value="{{ a.rank }}" class="input"></div>
+  <div><label class="text-sm text-muted">Email</label><input name="email" value="{{ a.email or '' }}" class="input font-mono"></div>
+  <div><label class="text-sm text-muted">Пароль от email</label><input name="email_password" value="{{ a.email_password or '' }}" class="input font-mono"></div>
   <div class="grid grid-cols-3 gap-2 md:col-span-2">
-    <div><label class="label">3ч ₽</label><input name="price_3h" required type="number" step="0.01" value="{{ a.price_3h }}" class="input font-mono"></div>
-    <div><label class="label">6ч ₽</label><input name="price_6h" required type="number" step="0.01" value="{{ a.price_6h }}" class="input font-mono"></div>
-    <div><label class="label">12ч ₽</label><input name="price_12h" required type="number" step="0.01" value="{{ a.price_12h }}" class="input font-mono"></div>
+    <div><label class="text-sm text-muted">3ч ₽</label><input name="price_3h" required type="number" step="0.01" value="{{ a.price_3h }}" class="input font-mono"></div>
+    <div><label class="text-sm text-muted">6ч ₽</label><input name="price_6h" required type="number" step="0.01" value="{{ a.price_6h }}" class="input font-mono"></div>
+    <div><label class="text-sm text-muted">12ч ₽</label><input name="price_12h" required type="number" step="0.01" value="{{ a.price_12h }}" class="input font-mono"></div>
   </div>
 
-  <div class="md:col-span-2 border-t border-line/60 pt-4">
-    <div class="label">Текущее фото</div>
+  <div class="md:col-span-2 border-t border-line/50 pt-4">
+    <div class="text-sm text-muted mb-2">Текущее фото:</div>
     {% if a.photo_id %}
-      <img src="/api/photo/{{ a.photo_id }}" class="w-32 h-32 object-cover rounded-xl border border-line mb-2 shadow-[0_12px_24px_-8px_rgba(0,0,0,.8)]">
-      <label class="text-sm flex items-center gap-2 cursor-pointer text-bad">
-        <input type="checkbox" name="remove_photo" value="1" class="accent-[#F25B3A] w-4 h-4">
+      <img src="/api/photo/{{ a.photo_id }}" class="w-32 h-32 object-cover rounded border border-line mb-2">
+      <label class="text-sm flex items-center gap-2 cursor-pointer text-rose-400">
+        <input type="checkbox" name="remove_photo" value="1" class="accent-accent w-4 h-4">
         Удалить фото
       </label>
     {% else %}
       <div class="text-muted text-sm mb-2">нет</div>
     {% endif %}
     <div class="mt-3">
-      <label class="label">Заменить фото (необязательно)</label>
-      <input name="photo" type="file" accept="image/*" class="input file:mr-3 file:px-3 file:py-1 file:rounded-md file:border-0 file:bg-accent file:text-white file:font-semibold file:cursor-pointer">
+      <label class="text-sm text-muted">Заменить фото (необязательно)</label>
+      <input name="photo" type="file" accept="image/*" class="input p-1">
     </div>
   </div>
 
   <div class="md:col-span-2 flex items-center gap-3 mt-2">
-    <button class="btn btn-primary"><i data-lucide="save" class="w-4 h-4"></i>Сохранить</button>
-    <a href="/accounts/{{ a.id }}" class="text-sm text-muted hover:text-accent">Отмена</a>
+    <button class="btn btn-primary">Сохранить</button>
+    <a href="/accounts/{{ a.id }}" class="text-sm text-muted hover:text-white">Отмена</a>
   </div>
 </form>
 {% endblock %}

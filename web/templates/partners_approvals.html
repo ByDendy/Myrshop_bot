@@ -1,57 +1,66 @@
 {% extends "base.html" %}
 {% block title %}Ожидают одобрения{% endblock %}
 {% block content %}
-<a href="/partners" class="text-sm text-muted hover:text-accent inline-flex items-center gap-1"><i data-lucide="arrow-left" class="w-4 h-4"></i>к дашборду</a>
-<h1 class="text-2xl font-bold mt-1 mb-4 flex items-center gap-2"><i data-lucide="hourglass" class="text-accent"></i>Ожидают одобрения <span class="text-muted font-mono text-lg">({{ accounts|length }})</span></h1>
+<a href="/partners" class="text-accent hover:underline text-sm mb-2 inline-block">← к дашборду</a>
+<h1 class="text-2xl font-bold mt-1 mb-4">⏳ Ожидают одобрения ({{ accounts|length }})</h1>
 
 {% if not accounts %}
-  <div class="card !p-10 text-center text-muted"><i data-lucide="check-circle-2" class="mx-auto mb-2 text-ok w-8 h-8"></i>Всё проверено, новых заявок нет</div>
+  <div class="card p-8 text-center text-muted">✅ Всё проверено, новых заявок нет</div>
 {% else %}
-<div class="space-y-4 rise">
+<div class="space-y-4">
   {% for item in accounts %}
     {% set a = item.account %}
     {% set partner = item.partner %}
-    {% set ok = a.price_3h >= item.min_3h and a.price_6h >= item.min_6h and a.price_12h >= item.min_12h %}
-    <div class="card card-hover !p-5">
-      <div class="flex items-start justify-between mb-4 gap-3 flex-wrap">
-        <div class="flex items-center gap-3">
-          <span class="avatar">{{ (partner.full_name or partner.username or '?')[0]|upper }}</span>
-          <div>
-            <div class="font-semibold">Заявка от <a href="/partners/{{ partner.id }}" class="link">{{ partner.full_name or '@' + (partner.username or partner.telegram_id|string) }}</a></div>
-            <div class="text-xs font-mono text-muted">{{ a.created_at.strftime('%d.%m %H:%M') }}</div>
-          </div>
+    <div class="card p-5">
+      <div class="flex items-start justify-between mb-3">
+        <div>
+          <span class="font-bold">🤝 Заявка от
+            <a href="/partners/{{ partner.id }}" class="text-accent hover:underline">
+              {{ partner.full_name or '@' + (partner.username or partner.telegram_id|string) }}
+            </a>
+          </span>
+          <span class="text-xs text-muted ml-2">{{ a.created_at.strftime('%d.%m %H:%M') }}</span>
         </div>
-        <span class="badge b-res">{{ a.rank }}</span>
+        <span class="text-xs bg-amber-900/50 text-amber-300 px-2 py-0.5 rounded border border-amber-500/30">{{ a.rank }}</span>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm mb-4">
-        <div class="bg-bg rounded-xl p-3 border border-line/60 font-mono break-all" style="box-shadow:inset 0 2px 5px rgba(0,0,0,.5)">
-          <div class="label font-sans">Аккаунт</div>
-          <div><span class="text-muted">login:</span> {{ a.login }}</div>
-          <div><span class="text-muted">password:</span> {{ a.password }}</div>
-          <div><span class="text-muted">Riot ID:</span>
-            {% if a.riot_id %}<a href="https://tracker.gg/valorant/profile/riot/{{ a.riot_id|urlencode }}/overview" target="_blank" class="link inline-flex items-center gap-1">{{ a.riot_id }}<i data-lucide="external-link" class="w-3.5 h-3.5"></i></a>{% else %}—{% endif %}</div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-4">
+        <div class="font-mono">
+          <div><b>Riot login:</b> {{ a.login }}</div>
+          <div><b>Riot password:</b> {{ a.password }}</div>
+          <div><b>Riot ID:</b>
+            {% if a.riot_id %}
+              <a href="https://tracker.gg/valorant/profile/riot/{{ a.riot_id|urlencode }}/overview"
+                 target="_blank" class="text-accent hover:underline">{{ a.riot_id }} ↗</a>
+            {% else %}—{% endif %}
+          </div>
         </div>
-        <div class="bg-bg rounded-xl p-3 border border-line/60 font-mono" style="box-shadow:inset 0 2px 5px rgba(0,0,0,.5)">
-          <div class="label font-sans">Цены (3 / 6 / 12 ч)</div>
-          <div class="text-accent font-bold">{{ a.price_3h|round(0)|int }} / {{ a.price_6h|round(0)|int }} / {{ a.price_12h|round(0)|int }} ₽</div>
-          <div class="text-muted text-xs mt-1">Минимум: {{ item.min_3h|round(0)|int }} / {{ item.min_6h|round(0)|int }} / {{ item.min_12h|round(0)|int }} ₽</div>
-          <div class="mt-2 font-sans">
-            {% if ok %}<span class="badge b-free"><i data-lucide="check" class="w-3 h-3"></i>Цены в норме</span>
-            {% else %}<span class="badge b-pw"><i data-lucide="alert-triangle" class="w-3 h-3"></i>Цены ниже минимума</span>{% endif %}
+        <div class="font-mono">
+          <div><b>Цены:</b> 3ч {{ a.price_3h|round(0)|int }} ₽ / 6ч {{ a.price_6h|round(0)|int }} ₽ / 12ч {{ a.price_12h|round(0)|int }} ₽</div>
+          <div class="text-muted text-xs mt-1">Минимумы: {{ item.min_3h|round(0)|int }} / {{ item.min_6h|round(0)|int }} / {{ item.min_12h|round(0)|int }} ₽</div>
+          <div class="mt-1">
+            {% if a.price_3h >= item.min_3h and a.price_6h >= item.min_6h and a.price_12h >= item.min_12h %}
+              <span class="text-emerald-500 text-xs">✅ Цены в норме</span>
+            {% else %}
+              <span class="text-rose-500 text-xs">⚠️ Цены ниже минимума</span>
+            {% endif %}
           </div>
         </div>
       </div>
 
       {% if a.photo_id %}
-        <a href="/api/photo/{{ a.photo_id }}" target="_blank"><img src="/api/photo/{{ a.photo_id }}" class="w-32 h-32 object-cover rounded-xl border border-line mb-4 shadow-[0_12px_24px_-8px_rgba(0,0,0,.8)] hover:shadow-glow transition"></a>
+        <a href="/api/photo/{{ a.photo_id }}" target="_blank">
+          <img src="/api/photo/{{ a.photo_id }}" class="w-32 h-32 object-cover rounded border border-line mb-3">
+        </a>
       {% endif %}
 
-      <div class="flex gap-2 border-t border-line/60 pt-4 flex-wrap">
-        <form method="post" action="/partners/approvals/{{ a.id }}/approve"><button class="btn btn-ok"><i data-lucide="check" class="w-4 h-4"></i>Одобрить</button></form>
-        <form method="post" action="/partners/approvals/{{ a.id }}/reject" class="flex gap-2 flex-1 min-w-[16rem]">
-          <input name="reason" required placeholder="Причина отклонения" class="input flex-1">
-          <button class="btn btn-danger"><i data-lucide="x" class="w-4 h-4"></i>Отклонить</button>
+      <div class="flex gap-2 border-t border-line/50 pt-3">
+        <form method="post" action="/partners/approvals/{{ a.id }}/approve" class="inline">
+          <button class="btn !bg-emerald-600 hover:!bg-emerald-500 text-white !py-1.5 text-sm">✅ Одобрить</button>
+        </form>
+        <form method="post" action="/partners/approvals/{{ a.id }}/reject" class="inline flex gap-2">
+          <input name="reason" required placeholder="Причина отклонения" class="input !py-1.5 w-72">
+          <button class="btn !bg-rose-600 hover:!bg-rose-500 text-white !py-1.5 text-sm">❌ Отклонить</button>
         </form>
       </div>
     </div>

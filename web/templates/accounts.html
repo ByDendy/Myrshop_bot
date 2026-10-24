@@ -3,10 +3,13 @@
 {% block content %}
 <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
   <h1 class="text-2xl font-bold">Аккаунты</h1>
+  <div class="flex items-center gap-2 flex-wrap">
+  <a href="/accounts/add" class="btn btn-primary btn-sm"><i data-lucide="plus" class="w-4 h-4"></i>Добавить</a>
   <div class="seg">
     <a href="/accounts" class="{% if not owner_filter and not current_rank %}on{% endif %}">Все</a>
     <a href="/accounts?owner=me" class="{% if owner_filter == 'me' %}on{% endif %}">Мои</a>
     <a href="/accounts?owner=partner" class="{% if owner_filter == 'partner' %}on{% endif %}"><i data-lucide="handshake" class="w-4 h-4"></i>Партнёрские</a>
+  </div>
   </div>
 </div>
 

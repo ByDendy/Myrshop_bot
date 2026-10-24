@@ -1,13 +1,12 @@
 {% extends "base.html" %}
 {% block content %}
-<h1 class="text-2xl font-bold mb-4 flex items-center gap-2"><i data-lucide="upload" class="text-accent"></i>Экспорт</h1>
-
-<div class="card !p-6">
+<h1 class="text-2xl font-bold mb-4">📤 Экспорт</h1>
+<div class="card p-6">
   <p class="mb-4 text-sm text-muted leading-relaxed">
-    Формат файла:
-    <code class="block sm:inline mt-1 sm:mt-0 px-2 py-1 rounded bg-bg border border-line text-ink font-mono text-xs">login;;password;;rank;;price_3h,price_6h,price_12h</code><br>
+    Формат файла: <br>
+    <code class="block mt-2 px-3 py-2 rounded bg-bg border border-line text-ink font-mono text-xs">login;;password;;rank;;price_3h,price_6h,price_12h</code><br>
     Каждая строка — один аккаунт. Такой же формат принимает массовая загрузка в боте.
   </p>
-  <a href="/export?download=1" class="btn btn-primary"><i data-lucide="download" class="w-4 h-4"></i>Скачать accounts.txt</a>
+  <a href="/export?download=1" class="btn btn-primary">⬇️ Скачать accounts.txt</a>
 </div>
 {% endblock %}

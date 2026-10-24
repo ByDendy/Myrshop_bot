@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Покупатели{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4 flex items-center gap-2"><i data-lucide="users-round" class="text-accent"></i>Покупатели</h1>
+
+<div class="card p-0 overflow-hidden"><div class="overflow-x-auto">
+<table class="tbl">
+  <thead><tr><th>TG ID</th><th>Имя / @username</th><th class="!text-right">Потратил</th><th class="!text-right">Аренд</th><th class="!text-right">Часов</th><th>Статус</th><th></th></tr></thead>
+  <tbody>
+  {% for row in customers %}
+    {% set c = row.customer %}
+    <tr {% if c.is_banned %}style="background:linear-gradient(90deg,rgba(251,113,133,.10),transparent)"{% endif %}>
+      <td class="font-mono text-xs text-muted">{{ c.telegram_id }}</td>
+      <td><div class="flex items-center gap-3">
+        <span class="avatar">{{ (c.first_name or '?')[0]|upper }}</span>
+        <div><div class="font-semibold">{{ c.first_name or "Без имени" }}</div>
+          {% if c.username %}<a href="https://t.me/{{ c.username }}" target="_blank" class="link text-xs">@{{ c.username }}</a>{% endif %}</div></div></td>
+      <td class="text-right font-mono text-accent font-bold">{{ row.spent }} ₽</td>
+      <td class="text-right font-mono">{{ row.count }}</td>
+      <td class="text-right font-mono text-muted">{{ row.hours }} ч</td>
+      <td>{% if c.is_banned %}<span class="badge b-pw"><i data-lucide="ban" class="w-3 h-3"></i>забанен</span>
+          {% else %}<span class="badge b-free"><i data-lucide="check-circle-2" class="w-3 h-3"></i>активен</span>{% endif %}</td>
+      <td class="text-right"><a href="/customers/{{ c.telegram_id }}" class="link inline-flex items-center gap-1 text-xs">открыть<i data-lucide="chevron-right" class="w-4 h-4"></i></a></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="7" class="py-8 text-center text-muted">Покупателей пока нет</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div></div>
+{% endblock %}
