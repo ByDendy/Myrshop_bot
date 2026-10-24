@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Ожидают одобрения{% endblock %}
+{% block content %}
+<a href="/partners" class="text-blue-600 hover:underline text-sm">← к дашборду</a>
+<h1 class="text-2xl font-bold mt-1 mb-4">⏳ Ожидают одобрения ({{ accounts|length }})</h1>
+
+{% if not accounts %}
+  <div class="bg-white rounded-lg shadow p-8 text-center text-slate-500">
+    ✅ Всё проверено, новых заявок нет
+  </div>
+{% else %}
+<div class="space-y-4">
+  {% for item in accounts %}
+    {% set a = item.account %}
+    {% set partner = item.partner %}
+    <div class="bg-white rounded-lg shadow p-5">
+      <div class="flex items-start justify-between mb-3">
+        <div>
+          <span class="font-bold">🤝 Заявка от
+            <a href="/partners/{{ partner.id }}" class="text-blue-600 hover:underline">
+              {{ partner.full_name or '@' + (partner.username or partner.telegram_id|string) }}
+            </a>
+          </span>
+          <span class="text-xs text-slate-500 ml-2">{{ a.created_at.strftime('%d.%m %H:%M') }}</span>
+        </div>
+        <span class="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded">{{ a.rank }}</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-4">
+        <div class="font-mono">
+          <div><b>Riot login:</b> {{ a.login }}</div>
+          <div><b>Riot password:</b> {{ a.password }}</div>
+          <div><b>Riot ID:</b>
+            {% if a.riot_id %}
+              <a href="https://tracker.gg/valorant/profile/riot/{{ a.riot_id|urlencode }}/overview"
+                 target="_blank" class="text-blue-600 hover:underline">{{ a.riot_id }} ↗</a>
+            {% else %}—{% endif %}
+          </div>
+        </div>
+        <div class="font-mono">
+          <div><b>Цены:</b> 3ч {{ a.price_3h|round(0)|int }} ₽ / 6ч {{ a.price_6h|round(0)|int }} ₽ / 12ч {{ a.price_12h|round(0)|int }} ₽</div>
+          <div class="text-slate-500 text-xs mt-1">Минимумы: {{ item.min_3h|round(0)|int }} / {{ item.min_6h|round(0)|int }} / {{ item.min_12h|round(0)|int }} ₽</div>
+          <div class="mt-1">
+            {% if a.price_3h >= item.min_3h and a.price_6h >= item.min_6h and a.price_12h >= item.min_12h %}
+              <span class="text-emerald-600 text-xs">✅ Цены в норме</span>
+            {% else %}
+              <span class="text-rose-600 text-xs">⚠️ Цены ниже минимума</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      {% if a.photo_id %}
+        <a href="/api/photo/{{ a.photo_id }}" target="_blank">
+          <img src="/api/photo/{{ a.photo_id }}" class="w-32 h-32 object-cover rounded mb-3">
+        </a>
+      {% endif %}
+
+      <div class="flex gap-2 border-t pt-3">
+        <form method="post" action="/partners/approvals/{{ a.id }}/approve" class="inline">
+          <button class="bg-emerald-600 text-white px-4 py-2 rounded text-sm hover:bg-emerald-700">
+            ✅ Одобрить
+          </button>
+        </form>
+        <form method="post" action="/partners/approvals/{{ a.id }}/reject" class="inline flex gap-2">
+          <input name="reason" required placeholder="Причина отклонения"
+                 class="border rounded px-3 py-2 text-sm w-72">
+          <button class="bg-rose-600 text-white px-4 py-2 rounded text-sm hover:bg-rose-700">
+            ❌ Отклонить
+          </button>
+        </form>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

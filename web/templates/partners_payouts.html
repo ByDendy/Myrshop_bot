@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Выплаты{% endblock %}
+{% block content %}
+<a href="/partners" class="text-blue-600 hover:underline text-sm">← к дашборду</a>
+<h1 class="text-2xl font-bold mt-1 mb-4">💰 Запросы на выплату ({{ payouts|length }})</h1>
+
+{% if not payouts %}
+  <div class="bg-white rounded-lg shadow p-8 text-center text-slate-500">
+    ✅ Нет активных запросов
+  </div>
+{% else %}
+<div class="space-y-3">
+  {% for item in payouts %}
+    {% set po = item.payout %}
+    {% set partner = item.partner %}
+    <div class="bg-white rounded-lg shadow p-5 flex items-center justify-between flex-wrap gap-4">
+      <div>
+        <a href="/partners/{{ partner.id }}" class="font-bold text-blue-600 hover:underline">
+          {{ partner.full_name or partner.username }}
+        </a>
+        <div class="text-xs text-slate-500 mt-1">запрос {{ po.requested_at.strftime('%d.%m %H:%M') }}</div>
+        <div class="text-xs font-mono text-slate-600 mt-1">
+          💳 {{ partner.payment_details or 'реквизиты не указаны' }}
+        </div>
+      </div>
+      <div class="text-2xl font-bold text-emerald-600">{{ po.amount }} ₽</div>
+      <div class="flex gap-2">
+        <form method="post" action="/partners/payouts/{{ po.id }}/pay" class="inline flex gap-2">
+          <input name="note" placeholder="Комментарий (опц.)"
+                 class="border rounded px-3 py-2 text-sm w-56">
+          <button class="bg-emerald-600 text-white px-4 py-2 rounded text-sm hover:bg-emerald-700">
+            ✅ Выплачено
+          </button>
+        </form>
+        <form method="post" action="/partners/payouts/{{ po.id }}/reject" class="inline flex gap-2">
+          <input name="reason" required placeholder="Причина отклонения"
+                 class="border rounded px-3 py-2 text-sm w-56">
+          <button class="bg-rose-600 text-white px-4 py-2 rounded text-sm hover:bg-rose-700">
+            ❌ Отклонить
+          </button>
+        </form>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}
