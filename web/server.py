@@ -1,16 +1,18 @@
 import logging
+import json
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from aiohttp import web
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+from passlib.context import CryptContext
 from sqlalchemy import select, func, desc, or_
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from aiogram.types import BufferedInputFile
 
 from config import WEB_ADMIN_PASSWORD, WEB_SECRET_KEY, ADMIN_IDS
 from database.models import (
-    Account, RentalHistory, RankSetting, Customer,
+    Account, RentalHistory, RankSetting, Customer, Manager,
     Partner, PartnerPayout, PartnerEarning,
 )
 from database.session import async_session
@@ -29,12 +31,18 @@ env = Environment(
     autoescape=select_autoescape(["html"]),
 )
 serializer = URLSafeTimedSerializer(WEB_SECRET_KEY, salt="web-session")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 SESSION_MAX_AGE = 60 * 60 * 24 * 7
+
+ALL_PERMISSIONS = [
+    "can_view_dashboard", "can_edit_accounts", "can_manage_partners",
+    "can_check_passwords", "can_pay_partners", "can_ban_customers", "can_edit_settings"
+]
 
 
 # ─── Авторизация ───
 
-def _current_user(request: web.Request):
+def _get_token_data(request: web.Request):
     token = request.cookies.get("session")
     if not token:
         return None
@@ -46,15 +54,46 @@ def _current_user(request: web.Request):
 
 @web.middleware
 async def auth_middleware(request, handler):
-    public = ("/login", "/api/photo/")
-    if any(request.path.startswith(p) for p in public):
+    public_paths = ("/login", "/api/photo/", "/privacy", "/consent", "/terms", "/partner-auth", "/static")
+    if any(request.path.startswith(p) for p in public_paths):
         return await handler(request)
 
-    user = _current_user(request)
-    if not user:
+    data = _get_token_data(request)
+    if not data:
         raise web.HTTPFound("/login")
 
-    request["user"] = user
+    # Если это партнёр
+    if data.get("type") == "partner":
+        if not request.path.startswith("/partner-portal"):
+            raise web.HTTPForbidden(text="Доступ только в личный кабинет.")
+        request["user"] = {"role": "partner", "partner_id": data["id"]}
+        return await handler(request)
+
+    # Если это владелец или менеджер
+    if data.get("type") == "owner":
+        request["user"] = {"role": "owner", "all_perms": True, "perms": {}}
+    elif data.get("type") == "manager":
+        async with async_session() as session:
+            mgr = await session.get(Manager, data["id"])
+            if not mgr:
+                raise web.HTTPFound("/login")
+            perms = json.loads(mgr.permissions) if mgr.permissions else {}
+            request["user"] = {"role": "manager", "perms": perms, "all_perms": False}
+    else:
+        raise web.HTTPFound("/login")
+
+    # Защита URL от прямого ввода
+    user = request["user"]
+    if not user["all_perms"]:
+        perms = user["perms"]
+        if request.path == "/" and not perms.get("can_view_dashboard"): raise web.HTTPForbidden()
+        if request.path.startswith("/accounts") and not perms.get("can_edit_accounts"): raise web.HTTPForbidden()
+        if request.path.startswith("/customers") and not perms.get("can_ban_customers"): raise web.HTTPForbidden()
+        if request.path.startswith("/partners") and not perms.get("can_manage_partners"): raise web.HTTPForbidden()
+        if request.path.startswith("/partners/passwords") and not perms.get("can_check_passwords"): raise web.HTTPForbidden()
+        if request.path.startswith("/partners/payouts") and not perms.get("can_pay_partners"): raise web.HTTPForbidden()
+        if request.path.startswith("/settings") and not perms.get("can_edit_settings"): raise web.HTTPForbidden()
+
     return await handler(request)
 
 
@@ -62,21 +101,78 @@ async def login_page(request: web.Request):
     error = None
     if request.method == "POST":
         data = await request.post()
+        login = data.get("login", "").strip()
         pwd = data.get("password", "")
-        if pwd and pwd == WEB_ADMIN_PASSWORD:
-            token = serializer.dumps({"user": "admin"})
+
+        # 1. Владелец (пустой логин)
+        if not login and pwd == WEB_ADMIN_PASSWORD:
+            token = serializer.dumps({"type": "owner"})
             resp = web.HTTPFound("/")
             resp.set_cookie("session", token, max_age=SESSION_MAX_AGE, httponly=True)
             raise resp
-        error = "Неверный пароль"
+
+        # 2. Менеджер
+        if login:
+            async with async_session() as session:
+                mgr = (await session.execute(select(Manager).where(Manager.login == login))).scalar_one_or_none()
+                if mgr and pwd_context.verify(pwd, mgr.password_hash):
+                    token = serializer.dumps({"type": "manager", "id": mgr.id})
+                    resp = web.HTTPFound("/")
+                    resp.set_cookie("session", token, max_age=SESSION_MAX_AGE, httponly=True)
+                    raise resp
+
+        error = "Неверный логин или пароль"
+
     html = env.get_template("login.html").render(error=error)
     return web.Response(text=html, content_type="text/html")
+
+
+async def partner_auth(request: web.Request):
+    """Магическая ссылка для входа партнёра"""
+    token = request.query.get("token")
+    if not token:
+        raise web.HTTPForbidden(text="Токен не передан")
+
+    try:
+        data = serializer.loads(token, max_age=900)  # 15 минут
+    except SignatureExpired:
+        raise web.HTTPForbidden(text="Ссылка истекла. Запросите новую в боте.")
+    except BadSignature:
+        raise web.HTTPForbidden(text="Неверная ссылка.")
+
+    if data.get("type") != "partner":
+        raise web.HTTPForbidden()
+
+    # Успех - выдаем куки
+    new_token = serializer.dumps({"type": "partner", "id": data["id"]})
+    resp = web.HTTPFound("/partner-portal")
+    resp.set_cookie("session", new_token, max_age=SESSION_MAX_AGE, httponly=True)
+    raise resp
 
 
 async def logout(request: web.Request):
     resp = web.HTTPFound("/login")
     resp.del_cookie("session")
     raise resp
+
+
+# ─── Портал Партнёра ───
+
+async def partner_portal(request: web.Request):
+    partner_id = request["user"]["partner_id"]
+    
+    async with async_session() as session:
+        partner = await session.get(Partner, partner_id)
+        accounts = (await session.execute(select(Account).where(Account.partner_id == partner_id))).scalars().all()
+        payouts = (await session.execute(select(PartnerPayout).where(PartnerPayout.partner_id == partner_id).order_by(desc(PartnerPayout.requested_at)).limit(10))).scalars().all()
+        
+        # Простая статистика
+        rentals = (await session.execute(select(func.count(RentalHistory.id)).join(Account).where(Account.partner_id == partner_id))).scalar() or 0
+
+    html = env.get_template("partner_portal.html").render(
+        p=partner, accounts=accounts, payouts=payouts, rentals=rentals
+    )
+    return web.Response(text=html, content_type="text/html")
 
 
 # ─── Хелперы ───
@@ -156,6 +252,7 @@ async def dashboard(request: web.Request):
         total_rentals=total_rentals, total_hours=total_hours,
         total_revenue=round(total_revenue, 2),
         recent=recent, acc_map=acc_map,
+        user=request.get("user")
     )
     return web.Response(text=html, content_type="text/html")
 
@@ -183,6 +280,7 @@ async def accounts_list(request: web.Request):
     html = env.get_template("accounts.html").render(
         accounts=accounts, ranks=ranks, current_rank=rank,
         owner_filter=owner_filter, timedelta=timedelta,
+        user=request.get("user")
     )
     return web.Response(text=html, content_type="text/html")
 
@@ -224,6 +322,7 @@ async def account_detail(request: web.Request):
         a=account, period=period,
         rentals=stats[0], hours=stats[1], revenue=round(stats[2], 2),
         history=history, recent_matches=recent_matches,
+        user=request.get("user")
     )
     return web.Response(text=html, content_type="text/html")
 
@@ -267,7 +366,7 @@ async def account_add_page(request: web.Request):
             notifications.push("Добавлен аккаунт", f"#{acc_id} · {acc.rank}", level="success")
             raise web.HTTPFound(f"/accounts/{acc_id}")
 
-    html = env.get_template("account_add.html").render(error=error)
+    html = env.get_template("account_add.html").render(error=error, user=request.get("user"))
     return web.Response(text=html, content_type="text/html")
 
 
@@ -313,7 +412,7 @@ async def account_edit_page(request: web.Request):
             except (KeyError, ValueError) as e:
                 error = f"Ошибка: {e}"
 
-    html = env.get_template("account_edit.html").render(a=account, error=error)
+    html = env.get_template("account_edit.html").render(a=account, error=error, user=request.get("user"))
     return web.Response(text=html, content_type="text/html")
 
 
@@ -343,6 +442,7 @@ async def awaiting_list(request: web.Request):
     html = env.get_template("password_change.html").render(
         my_accounts=my_accounts,
         partner_accounts=partner_accounts,
+        user=request.get("user")
     )
     return web.Response(text=html, content_type="text/html")
 
@@ -413,7 +513,7 @@ async def customers_list(request: web.Request):
             result.append({"customer": c, **st})
         result.sort(key=lambda x: x["spent"], reverse=True)
 
-    html = env.get_template("customers.html").render(customers=result)
+    html = env.get_template("customers.html").render(customers=result, user=request.get("user"))
     return web.Response(text=html, content_type="text/html")
 
 
@@ -458,9 +558,12 @@ async def customer_detail(request: web.Request):
             activity_map[key] = cnt
 
         days = []
+        start_date = (datetime.utcnow() - timedelta(days=29)).date()
+        for _ in range(start_date.weekday()):
+            days.append({"date": "", "count": -1})
         for i in range(29, -1, -1):
             day = (datetime.utcnow() - timedelta(days=i)).date()
-            days.append({"date": day.isoformat(), "count": activity_map.get(day.isoformat(), 0)})
+            days.append({"date": day.strftime('%d.%m.%Y'), "count": activity_map.get(day.isoformat(), 0)})
 
         history = (await session.execute(
             select(RentalHistory, Account.rank)
@@ -478,6 +581,7 @@ async def customer_detail(request: web.Request):
         favorite_rank=fav[0] if fav else "—",
         activity_days=days,
         history=history,
+        user=request.get("user")
     )
     return web.Response(text=html, content_type="text/html")
 
@@ -532,7 +636,7 @@ async def export_page(request: web.Request):
             body="\n".join(lines), content_type="text/plain",
             headers={"Content-Disposition": 'attachment; filename="accounts.txt"'},
         )
-    html = env.get_template("export.html").render()
+    html = env.get_template("export.html").render(user=request.get("user"))
     return web.Response(text=html, content_type="text/html")
 
 
@@ -546,7 +650,7 @@ async def notifications_api(request: web.Request):
 async def notifications_page(request: web.Request):
     cat = request.query.get("cat", "all")
     events = notifications.get_all(category=cat)
-    html = env.get_template("notifications.html").render(events=events, cat=cat)
+    html = env.get_template("notifications.html").render(events=events, cat=cat, user=request.get("user"))
     return web.Response(text=html, content_type="text/html")
 
 
@@ -615,6 +719,31 @@ async def settings_page(request: web.Request):
                 except (ValueError, KeyError) as e:
                     error = f"Ошибка удаления: {e}"
 
+            elif action == "add_manager":
+                try:
+                    login = post["login"].strip()
+                    pwd = post["password"].strip()
+                    if len(login) < 3 or len(pwd) < 6: raise ValueError("Логин от 3 символов, пароль от 6.")
+                    
+                    existing = (await session.execute(select(Manager).where(Manager.login == login))).scalar_one_or_none()
+                    if existing: raise ValueError("Такой логин уже существует")
+
+                    perms = {p: True for p in ALL_PERMISSIONS if post.get(p) == "on"}
+                    session.add(Manager(login=login, password_hash=pwd_context.hash(pwd), permissions=json.dumps(perms)))
+                    await session.commit()
+                    success = f"Менеджер {login} создан"
+                except (ValueError, KeyError) as e: error = f"Ошибка: {e}"
+
+            elif action == "delete_manager":
+                try:
+                    mid = int(post["manager_id"])
+                    mgr = await session.get(Manager, mid)
+                    if mgr:
+                        await session.delete(mgr)
+                        await session.commit()
+                        success = "Менеджер удалён"
+                except (ValueError, KeyError) as e: error = f"Ошибка: {e}"
+
         commission_str = await get_setting(session, "partner_commission", "10")
         try:
             commission_float = float(commission_str)
@@ -625,11 +754,15 @@ async def settings_page(request: web.Request):
         ranks = (await session.execute(
             select(RankSetting).order_by(RankSetting.rank)
         )).scalars().all()
+        managers = (await session.execute(
+            select(Manager).order_by(Manager.id)
+        )).scalars().all()
 
     html = env.get_template("settings.html").render(
         commission=commission_float,
         partner_share=round(partner_share, 1),
-        ranks=ranks, error=error, success=success,
+        ranks=ranks, managers=managers, error=error, success=success,
+        user=request.get("user")
     )
     return web.Response(text=html, content_type="text/html")
 
@@ -704,6 +837,7 @@ async def partners_dashboard(request: web.Request):
         total_frozen=round(total_frozen),
         total_paid=round(total_paid),
         recent_events=recent_events,
+        user=request.get("user")
     )
     return web.Response(text=html, content_type="text/html")
 
@@ -742,7 +876,7 @@ async def partners_list(request: web.Request):
             })
 
     html = env.get_template("partners_list.html").render(
-        partners=partners_data, q=q, status_filter=status_filter,
+        partners=partners_data, q=q, status_filter=status_filter, user=request.get("user")
     )
     return web.Response(text=html, content_type="text/html")
 
@@ -785,6 +919,7 @@ async def partner_detail(request: web.Request):
         p=partner, accounts=accounts, payouts=payouts,
         earnings=earnings, acc_map=acc_map,
         pending_request=pending_request,
+        user=request.get("user")
     )
     return web.Response(text=html, content_type="text/html")
 
@@ -858,7 +993,7 @@ async def partners_approvals(request: web.Request):
                 "min_12h": rank_setting.min_price_12h if rank_setting else 0,
             })
 
-    html = env.get_template("partners_approvals.html").render(accounts=items)
+    html = env.get_template("partners_approvals.html").render(accounts=items, user=request.get("user"))
     return web.Response(text=html, content_type="text/html")
 
 
@@ -934,7 +1069,7 @@ async def partners_passwords(request: web.Request):
             partner = await session.get(Partner, acc.partner_id) if acc.partner_id else None
             items.append({"account": acc, "partner": partner})
 
-    html = env.get_template("partners_passwords.html").render(accounts=items)
+    html = env.get_template("partners_passwords.html").render(accounts=items, user=request.get("user"))
     return web.Response(text=html, content_type="text/html")
 
 
@@ -1015,7 +1150,7 @@ async def partners_payouts(request: web.Request):
             partner = await session.get(Partner, po.partner_id)
             items.append({"payout": po, "partner": partner})
 
-    html = env.get_template("partners_payouts.html").render(payouts=items)
+    html = env.get_template("partners_payouts.html").render(payouts=items, user=request.get("user"))
     return web.Response(text=html, content_type="text/html")
 
 
@@ -1097,6 +1232,8 @@ def create_web_app(bot):
     app.router.add_get("/login", login_page)
     app.router.add_post("/login", login_page)
     app.router.add_get("/logout", logout)
+    app.router.add_get("/partner-auth", partner_auth)
+    app.router.add_get("/partner-portal", partner_portal)
 
     app.router.add_get("/", dashboard)
     app.router.add_get("/accounts", accounts_list)
@@ -1138,5 +1275,6 @@ def create_web_app(bot):
     app.router.add_post("/partners/{id}/unblock", partner_unblock)
     app.router.add_post("/partners/{id}/payout", partner_payout_direct)
 
+    app.router.add_static('/static', path='static')
     register_photo_route(app, bot)
     return app
