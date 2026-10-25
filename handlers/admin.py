@@ -409,8 +409,17 @@ async def awaiting_menu(callback: CallbackQuery, session):
 
 
 @router.callback_query(F.data.startswith("chpw|"))
-async def change_password_start(callback: CallbackQuery, state: FSMContext):
+async def change_password_start(callback: CallbackQuery, state: FSMContext, session):
     acc_id = int(callback.data.split("|")[1])
+    account = await session.get(Account, acc_id)
+    
+    if account and account.partner_id:
+        await callback.answer(
+            "Это партнёрский аккаунт. Партнёр сам сменит пароль через бота.",
+            show_alert=True,
+        )
+        return
+    
     await state.update_data(acc_id=acc_id)
     await state.set_state(ChangePassword.new_password)
     await callback.message.delete()
@@ -422,6 +431,19 @@ async def change_password_save(message: Message, state: FSMContext, session, fun
     data = await state.get_data()
     acc_id = data["acc_id"]
     account = await session.get(Account, acc_id)
+
+    # 🛡️ ЗАЩИТА: не обрабатываем партнёрские аккаунты — их меняет партнёр через бота
+    if account and account.partner_id:
+        await message.answer(
+            "❌ Это партнёрский аккаунт.\n\n"
+            "Партнёр должен сам сменить пароль через бота:\n"
+            "«🤝 Партнёрам» → «📁 Мои аккаунты» → «🔑 Сменить пароль».\n\n"
+            "Затем вы подтвердите пароль в разделе «🤝 Партнёры → 🔍 Пароли».",
+            reply_markup=await admin_menu(session),
+        )
+        await state.clear()
+        return
+
     if account:
         account.password = message.text.strip()
         account.status = "free"
