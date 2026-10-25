@@ -36,7 +36,7 @@ class EditPaymentDetails(StatesGroup):
     wait_text = State()
 
 
-class PartnerChangePassword(StatesGroup):
+class ChangePassword(StatesGroup):
     new_password = State()
 
 
@@ -116,11 +116,9 @@ async def partner_register(callback: CallbackQuery, session):
         status="active",
     )
     session.add(partner)
-    await session.flush() # Получаем partner.id до коммита
+    await session.flush()
 
-    # Загружаем аватарку при регистрации
     await refresh_avatar(callback.bot, partner)
-    
     await session.commit()
 
     await callback.message.delete()
@@ -157,7 +155,6 @@ async def partner_profile(callback: CallbackQuery, session):
             )
         )).scalar() or 0
 
-    # Активные запросы на выплату
     pending_payout = (await session.execute(
         select(func.coalesce(func.sum(PartnerPayout.amount), 0)).where(
             PartnerPayout.partner_id == partner.id,
@@ -229,7 +226,6 @@ async def partner_accounts(callback: CallbackQuery, session):
         if acc.status == "rejected" and acc.reject_reason:
             text += f"   ⚠️ {acc.reject_reason}\n"
 
-    # Кнопки: удалить (если free) и сменить пароль (если awaiting_review)
     buttons = []
     for acc in accounts:
         if acc.status == "free":
@@ -268,7 +264,7 @@ async def partner_change_password_start(callback: CallbackQuery, state: FSMConte
         )
         return
 
-    await state.set_state(PartnerPartnerChangePassword.new_password)
+    await state.set_state(ChangePassword.new_password)
     await state.update_data(acc_id=acc_id)
     await callback.message.delete()
     await callback.message.answer(
@@ -280,7 +276,7 @@ async def partner_change_password_start(callback: CallbackQuery, state: FSMConte
     )
 
 
-@router.message(PartnerChangePassword.new_password)
+@router.message(ChangePassword.new_password)
 async def partner_change_password_save(message: Message, state: FSMContext, session):
     data = await state.get_data()
     acc_id = data["acc_id"]
@@ -315,7 +311,6 @@ async def partner_change_password_save(message: Message, state: FSMContext, sess
         reply_markup=partner_back_to_main(),
     )
 
-    # Уведомление админу
     admin_text = (
         f"🔑 *Пароль от партнёра на проверку*\n\n"
         f"Партнёр: {partner.full_name or 'без имени'}"
@@ -629,7 +624,6 @@ async def partner_payout(callback: CallbackQuery, session):
         await callback.answer(error, show_alert=True)
         return
 
-    # Уведомление админам
     admin_text = (
         f"💰 *Запрос на выплату*\n\n"
         f"Партнёр: {partner.full_name or 'без имени'}"
