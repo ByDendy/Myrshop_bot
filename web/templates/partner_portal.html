@@ -13,6 +13,7 @@
 </nav>
 {% endblock %}
 {% block poll %}{% endblock %}
+{% block main_class %}{% endblock %}
 {% block content %}
 <div class="max-w-4xl mx-auto">
   <div class="flex items-center gap-4 mb-6">
@@ -53,7 +54,7 @@
           <td class="text-right font-mono text-accent">{{ a.price_3h|round(0)|int }} / {{ a.price_6h|round(0)|int }} / {{ a.price_12h|round(0)|int }} ₽</td>
         </tr>
       {% else %}
-        <tr><td colspan="4" class="py-8 text-center text-muted">У вас пока нет аккаунтов</td></tr>
+        <tr><td colspan="4"><div class="empty"><span class="chip chip-mute"><i data-lucide="inbox" class="w-4 h-4"></i></span><div>У вас пока нет аккаунтов</div></div></td></tr>
       {% endfor %}
       </tbody>
     </table>
@@ -75,7 +76,7 @@
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="3" class="py-6 text-center text-muted">Выплат пока не было</td></tr>
+        <tr><td colspan="3"><div class="empty"><span class="chip chip-mute"><i data-lucide="inbox" class="w-4 h-4"></i></span><div>Выплат пока не было</div></div></td></tr>
       {% endfor %}
       </tbody>
     </table>

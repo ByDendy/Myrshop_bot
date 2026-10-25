@@ -13,3 +13,18 @@
 {% macro avatar(avatar_id, name, cls='') -%}
 {% if avatar_id %}<img src="/api/photo/{{ avatar_id }}" alt="" class="avatar object-cover {{ cls }}">{% else %}<span class="avatar {{ cls }}">{{ (name or '?')[0]|upper }}</span>{% endif %}
 {%- endmacro %}
+
+{% macro secret(value, copy=True) -%}
+<span class="secret-wrap inline-flex items-center gap-1.5 align-middle"><span data-secret class="secret">{{ value }}</span>{% if copy and value and value != '—' %}<button type="button" class="copy-btn" data-copy title="Копировать"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button>{% endif %}</span>
+{%- endmacro %}
+
+{% macro expires_iso(a) -%}
+{%- if a.status == 'reserved' -%}
+  {%- if a.reserved_until -%}{{ a.reserved_until.isoformat() }}Z
+  {%- elif a.reserved_at and timedelta is defined -%}{{ (a.reserved_at + timedelta(minutes=15)).isoformat() }}Z{%- endif -%}
+{%- elif a.status == 'rented' and a.rented_until -%}{{ a.rented_until.isoformat() }}Z{%- endif -%}
+{%- endmacro %}
+
+{% macro timer(a) -%}
+{% set iso = expires_iso(a)|trim %}{% if iso %}<span class="timer font-mono text-xs {{ 'text-warn' if a.status == 'reserved' else 'text-accent' }}" data-expire="{{ iso }}"></span>{% endif %}
+{%- endmacro %}

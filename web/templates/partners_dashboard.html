@@ -42,7 +42,7 @@
   {% for e in recent_events %}
     <tr><td class="!whitespace-normal">{{ e.event }}</td><td class="font-mono text-xs text-muted">{{ e.ts }}</td></tr>
   {% else %}
-    <tr><td colspan="2" class="py-8 text-center text-muted">Пока нет событий</td></tr>
+    <tr><td colspan="2"><div class="empty"><span class="chip chip-mute"><i data-lucide="inbox" class="w-4 h-4"></i></span><div>Пока нет событий</div></div></td></tr>
   {% endfor %}
   </tbody>
 </table></div></div>

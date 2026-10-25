@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import avatar %}
+{% from "_macros.html" import avatar, secret %}
 {% block title %}Выплаты{% endblock %}
 {% block content %}
 <a href="/partners" class="text-sm text-muted hover:text-accent inline-flex items-center gap-1"><i data-lucide="arrow-left" class="w-4 h-4"></i>к дашборду</a>
@@ -24,7 +24,7 @@
         <div class="num text-3xl text-ok" style="text-shadow:0 0 22px rgba(74,222,128,.4)">{{ po.amount }} ₽</div>
       </div>
       <div class="bg-bg rounded-xl p-3 border border-line/60 font-mono text-xs mb-4 flex items-center gap-2 break-all" style="box-shadow:inset 0 2px 5px rgba(0,0,0,.5)">
-        <i data-lucide="credit-card" class="w-4 h-4 text-muted shrink-0"></i>{{ partner.payment_details or 'реквизиты не указаны' }}
+        <i data-lucide="credit-card" class="w-4 h-4 text-muted shrink-0"></i>{{ secret(partner.payment_details or 'реквизиты не указаны') }}
       </div>
       <div class="flex gap-2 flex-wrap border-t border-line/60 pt-4">
         <form method="post" action="/partners/payouts/{{ po.id }}/pay" class="flex gap-2 flex-1 min-w-[16rem]">

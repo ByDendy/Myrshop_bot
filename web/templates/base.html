@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<script>try{var d=document.documentElement;d.dataset.privacy=localStorage.getItem("privacy")??"1";d.dataset.collapsed=localStorage.getItem("collapsed")??"0"}catch(e){}</script>
 <title>{% block title %}MyrShop Admin{% endblock %}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -81,8 +82,8 @@ tailwind.config = { theme: { extend: {
     .navlink:hover { background: rgba(255,255,255,.07); }
     .navlink.on { color:#fff; background: linear-gradient(135deg,rgba(124,58,237,.35),rgba(59,130,246,.18)); box-shadow: inset 0 0 0 1px rgba(139,92,246,.45), 0 0 18px rgba(139,92,246,.25); }
     .seg { @apply inline-flex gap-1 p-1 rounded-full text-sm; background:#0f0e13; box-shadow: inset 0 2px 4px rgba(0,0,0,.6), 0 1px 0 rgba(255,255,255,.04); }
-    .seg a { @apply px-3.5 py-1.5 rounded-full text-muted transition-all duration-300 hover:text-ink inline-flex items-center gap-1.5; }
-    .seg a.on { color:#fff; background: linear-gradient(135deg,#7c3aed,#3b82f6); box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 6px 14px -6px rgba(124,58,237,.8); }
+    .seg a, .seg button { @apply px-3.5 py-1.5 rounded-full text-muted transition-all duration-300 hover:text-ink inline-flex items-center gap-1.5; }
+    .seg a.on, .seg button.on { color:#fff; background: linear-gradient(135deg,#7c3aed,#3b82f6); box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 6px 14px -6px rgba(124,58,237,.8); }
     .alert { @apply rounded-2xl border px-4 py-3 text-sm; backdrop-filter: blur(8px); box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 10px 22px -12px #000; }
     .alert-warn { color:#FBBF24; border-color:rgba(251,191,36,.35); background:linear-gradient(180deg,rgba(251,191,36,.15),rgba(251,191,36,.05)); }
     .alert-bad { color:#FB7185; border-color:rgba(251,113,133,.35); background:linear-gradient(180deg,rgba(251,113,133,.15),rgba(251,113,133,.05)); }
@@ -90,6 +91,44 @@ tailwind.config = { theme: { extend: {
     .qa { @apply card card-hover block; }
     .avatar { @apply w-9 h-9 rounded-full grid place-items-center font-bold text-sm text-white; background: linear-gradient(135deg,rgba(139,92,246,.6),rgba(59,130,246,.45));
               border:1px solid rgba(255,255,255,.18); box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 6px 14px -6px rgba(124,58,237,.7); }
+  }
+  @layer components {
+    .side { position:fixed; inset:0 auto 0 0; z-index:50; width:16.5rem; display:flex; flex-direction:column; transform:translateX(-100%);
+            background:rgba(20,19,22,.86); backdrop-filter:blur(18px); border-right:1px solid rgba(255,255,255,.08); box-shadow:24px 0 60px -30px #000;
+            transition:transform .3s ease, width .3s ease; }
+    .side.open { transform:none; }
+    .sl { @apply relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-muted w-full transition-all duration-300 hover:text-ink; }
+    .sl:hover { background:rgba(255,255,255,.07); }
+    .sl.on { color:#fff; background:linear-gradient(135deg,rgba(124,58,237,.38),rgba(59,130,246,.18)); box-shadow:inset 0 0 0 1px rgba(139,92,246,.45), 0 0 18px rgba(139,92,246,.25); }
+    .sl-badge { @apply ml-auto font-mono text-[11px] font-bold px-1.5 min-w-[1.25rem] h-5 grid place-items-center rounded-full text-white; background:linear-gradient(135deg,#7c3aed,#3b82f6); box-shadow:0 4px 10px -3px rgba(124,58,237,.8); }
+    .grp-title { @apply px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-gray-500; }
+    .empty { @apply flex flex-col items-center gap-2 py-8 text-muted text-sm; }
+    .copy-btn { @apply inline-grid place-items-center w-6 h-6 rounded-lg text-muted transition-all duration-300 hover:text-accent; background:rgba(255,255,255,.06); }
+    .copy-btn:hover { background:rgba(139,92,246,.2); }
+    .secret { display:inline-block; transition:filter .25s ease; }
+    .toast-bar { height:2px; margin-top:.5rem; border-radius:9999px; background:linear-gradient(90deg,#8b5cf6,#3b82f6); animation:shrink 6s linear forwards; }
+  }
+  :root { --sw:16.5rem; }
+  html[data-collapsed="1"] { --sw:4.75rem; }
+  .app-main { transition:margin-left .3s ease; }
+  html[data-privacy="1"] [data-secret]:not(.revealed) { filter:blur(6px); cursor:pointer; user-select:none; }
+  html:not([data-privacy="1"]) .priv-on, html[data-privacy="1"] .priv-off, html[data-privacy="1"] .ico-show, html:not([data-privacy="1"]) .ico-hide { display:none; }
+  .live-hide { display:none !important; }
+  @keyframes shrink { from { width:100% } to { width:0 } }
+  @media (min-width:1024px) {
+    .side { transform:none; width:var(--sw); }
+    .app-main { margin-left:var(--sw); }
+    html[data-collapsed="1"] .side .lbl, html[data-collapsed="1"] .side .grp-title, html[data-collapsed="1"] .side .brand-txt { display:none; }
+    html[data-collapsed="1"] .side .sl { justify-content:center; padding-inline:0; }
+    html[data-collapsed="1"] .side .sl-badge { position:absolute; top:2px; right:8px; margin:0; min-width:1rem; height:1rem; font-size:9px; }
+  }
+  @media (max-width:639px) {
+    .tbl, .tbl tbody { display:block; }
+    .tbl thead { display:none; }
+    .tbl tbody tr { display:block; padding:.75rem 1rem; }
+    .tbl td { display:flex; justify-content:space-between; align-items:center; gap:1rem; padding:.3rem 0; white-space:normal; text-align:right; }
+    .tbl td[data-label]::before { content:attr(data-label); color:#9CA3AF; font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; text-align:left; flex-shrink:0; }
+    .tbl td.tbl-empty { display:block; text-align:center; }
   }
   @keyframes rise { from { opacity:0; transform:translateY(12px) scale(.985) } to { opacity:1; transform:none } }
   .rise > * { animation: rise .45s cubic-bezier(.2,.8,.2,1) both; }
@@ -100,68 +139,216 @@ tailwind.config = { theme: { extend: {
 </head>
 <body class="bg-bg text-ink font-sans min-h-screen antialiased">
 {% block nav %}
-<nav class="sticky top-0 z-40 backdrop-blur-xl border-b border-white/10" style="background:rgba(20,19,22,.72);box-shadow:0 12px 32px -16px #000, inset 0 -1px 0 rgba(255,255,255,.04)">
-  <div class="max-w-7xl mx-auto px-4 py-2 min-h-14 flex flex-wrap items-center gap-1">
-    <a href="/" class="flex items-center gap-2.5 font-bold mr-4 shrink-0">
-      <span class="w-9 h-9 rounded-xl grid place-items-center" style="background:linear-gradient(135deg,#7c3aed,#3b82f6);box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 8px 20px -6px rgba(124,58,237,.8)"><i data-lucide="gamepad-2" class="w-4 h-4 text-white"></i></span>
-      <span class="hidden sm:inline">MyrShop</span>
-    </a>
-    {% if user.all_perms or user.perms.can_view_dashboard %}
-      <a href="/" title="Дашборд" class="navlink"><i data-lucide="layout-dashboard" class="w-4 h-4"></i><span class="hidden xl:inline">Дашборд</span></a>
-    {% endif %}
-    {% if user.all_perms or user.perms.can_edit_accounts %}
-      <a href="/accounts" title="Аккаунты" class="navlink"><i data-lucide="layout-list" class="w-4 h-4"></i><span class="hidden xl:inline">Аккаунты</span></a>
-    {% endif %}
-    {% if user.all_perms or user.perms.can_ban_customers %}
-      <a href="/customers" title="Покупатели" class="navlink"><i data-lucide="users-round" class="w-4 h-4"></i><span class="hidden xl:inline">Покупатели</span></a>
-    {% endif %}
+{% set nc = nav_counts if nav_counts is defined and nav_counts else {} %}
+{% set n_partners = (nc.approvals or 0) + (nc.payouts or 0) %}
+{% set n_pw = nc.passwords or 0 %}
+<aside id="side" class="side">
+  <a href="/" class="flex items-center gap-2.5 px-4 h-16 shrink-0 font-bold">
+    <span class="w-9 h-9 rounded-xl grid place-items-center shrink-0" style="background:linear-gradient(135deg,#7c3aed,#3b82f6);box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 8px 20px -6px rgba(124,58,237,.8)"><i data-lucide="gamepad-2" class="w-4 h-4 text-white"></i></span>
+    <span class="brand-txt">MyrShop</span>
+  </a>
+  <nav class="flex-1 overflow-y-auto px-3 py-2 space-y-5">
+    <div>
+      <div class="grp-title">Магазин</div>
+      <div class="space-y-1">
+        {% if user.all_perms or user.perms.can_view_dashboard %}
+          <a href="/" title="Дашборд" class="sl"><i data-lucide="layout-dashboard" class="w-[18px] h-[18px] shrink-0"></i><span class="lbl">Дашборд</span></a>
+        {% endif %}
+        {% if user.all_perms or user.perms.can_edit_accounts %}
+          <a href="/accounts" title="Аккаунты" class="sl"><i data-lucide="layout-list" class="w-[18px] h-[18px] shrink-0"></i><span class="lbl">Аккаунты</span></a>
+        {% endif %}
+        {% if user.all_perms or user.perms.can_ban_customers %}
+          <a href="/customers" title="Покупатели" class="sl"><i data-lucide="users-round" class="w-[18px] h-[18px] shrink-0"></i><span class="lbl">Покупатели</span></a>
+        {% endif %}
+      </div>
+    </div>
     {% if user.all_perms or user.perms.can_manage_partners %}
-      <a href="/partners" title="Партнёры" class="navlink"><i data-lucide="handshake" class="w-4 h-4"></i><span class="hidden xl:inline">Партнёры</span></a>
-      <a href="/password-change" title="Пароли" class="navlink"><i data-lucide="key-round" class="w-4 h-4"></i><span class="hidden xl:inline">Пароли</span></a>
+    <div>
+      <div class="grp-title">Партнёры</div>
+      <div class="space-y-1">
+        <a href="/partners" title="Партнёры" class="sl"><i data-lucide="handshake" class="w-[18px] h-[18px] shrink-0"></i><span class="lbl">Партнёры</span>{% if n_partners %}<span class="sl-badge">{{ n_partners }}</span>{% endif %}</a>
+        <a href="/password-change" title="Пароли" class="sl"><i data-lucide="key-round" class="w-[18px] h-[18px] shrink-0"></i><span class="lbl">Пароли</span>{% if n_pw %}<span class="sl-badge">{{ n_pw }}</span>{% endif %}</a>
+      </div>
+    </div>
     {% endif %}
-    <a href="/notifications" title="Уведомления" class="navlink"><i data-lucide="bell" class="w-4 h-4"></i><span class="hidden xl:inline">Уведомления</span></a>
-    {% if user.all_perms or user.perms.can_edit_settings %}
-      <a href="/settings" title="Настройки" class="navlink"><i data-lucide="settings" class="w-4 h-4"></i><span class="hidden xl:inline">Настройки</span></a>
-    {% endif %}
-    <a href="/logout" title="Выйти" class="navlink ml-auto hover:!text-bad shrink-0" data-noactive><i data-lucide="log-out" class="w-4 h-4"></i><span class="hidden xl:inline">Выйти</span></a>
+    <div>
+      <div class="grp-title">Система</div>
+      <div class="space-y-1">
+        <a href="/notifications" title="Уведомления" class="sl"><i data-lucide="bell" class="w-[18px] h-[18px] shrink-0"></i><span class="lbl">Уведомления</span></a>
+        {% if user.all_perms or user.perms.can_edit_settings %}
+          <a href="/settings" title="Настройки" class="sl"><i data-lucide="settings" class="w-[18px] h-[18px] shrink-0"></i><span class="lbl">Настройки</span></a>
+        {% endif %}
+      </div>
+    </div>
+  </nav>
+  <div class="p-3 border-t border-white/10 space-y-1">
+    <button type="button" data-privacy-toggle class="sl" title="Режим приватности">
+      <i data-lucide="eye-off" class="ico-hide w-[18px] h-[18px] shrink-0"></i><i data-lucide="eye" class="ico-show w-[18px] h-[18px] shrink-0"></i>
+      <span class="lbl"><span class="priv-on">Приватность: вкл</span><span class="priv-off">Приватность: выкл</span></span>
+    </button>
+    <button type="button" id="collapse-btn" class="sl hidden lg:flex" title="Свернуть меню"><i data-lucide="panel-left-close" class="w-[18px] h-[18px] shrink-0"></i><span class="lbl">Свернуть</span></button>
+    <a href="/logout" title="Выйти" class="sl hover:!text-bad" data-noactive><i data-lucide="log-out" class="w-[18px] h-[18px] shrink-0"></i><span class="lbl">Выйти</span></a>
   </div>
-</nav>
+</aside>
+<div id="side-ov" class="hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"></div>
+<header class="lg:hidden sticky top-0 z-30 flex items-center gap-3 px-4 h-14 backdrop-blur-xl border-b border-white/10" style="background:rgba(20,19,22,.8)">
+  <button id="burger" type="button" class="btn btn-ghost btn-sm !px-2.5" aria-label="Меню"><i data-lucide="menu" class="w-5 h-5"></i></button>
+  <a href="/" class="font-bold">MyrShop</a>
+  <button type="button" data-privacy-toggle class="btn btn-ghost btn-sm !px-2.5 ml-auto" aria-label="Приватность"><i data-lucide="eye-off" class="ico-hide w-4 h-4"></i><i data-lucide="eye" class="ico-show w-4 h-4"></i></button>
+</header>
 {% endblock %}
 
-<div id="toasts" class="fixed top-20 right-4 left-4 sm:left-auto sm:w-80 space-y-2 z-50"></div>
+<div id="toasts" class="fixed top-16 lg:top-4 right-4 left-4 sm:left-auto sm:w-80 space-y-2 z-[70]"></div>
 
-<main class="max-w-7xl mx-auto px-4 py-6 rise">
-  {% block content %}{% endblock %}
+<div id="cfm" class="hidden fixed inset-0 z-[60] items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+  <div class="card !p-6 w-full max-w-sm text-center" role="dialog" aria-modal="true">
+    <span class="chip !w-12 !h-12 mx-auto mb-3"><i data-lucide="alert-triangle" class="w-5 h-5"></i></span>
+    <div id="cfm-msg" class="font-semibold mb-5"></div>
+    <div class="flex gap-2 justify-center">
+      <button type="button" id="cfm-no" class="btn btn-ghost">Отмена</button>
+      <button type="button" id="cfm-yes" class="btn btn-danger">Подтвердить</button>
+    </div>
+  </div>
+</div>
+
+<main class="{% block main_class %}app-main{% endblock %}">
+  <div class="max-w-7xl mx-auto px-4 py-6 rise">
+    {% block content %}{% endblock %}
+  </div>
+  <footer class="max-w-7xl mx-auto px-4 pb-8 text-xs text-muted">MyrShop Admin</footer>
 </main>
-
-<footer class="max-w-7xl mx-auto px-4 pb-8 text-xs text-muted">MyrShop Admin</footer>
 
 <script>
 lucide.createIcons();
-// подсветка текущего раздела в меню
-(function () {
-  const p = location.pathname;
-  let best = null;
-  document.querySelectorAll('.navlink:not([data-noactive])').forEach(a => {
+const root = document.documentElement;
+const ls = { get:(k,d)=>{try{return localStorage.getItem(k) ?? d}catch(e){return d}}, set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}} };
+
+// ---- боковое меню
+const side = document.getElementById('side'), ov = document.getElementById('side-ov');
+function toggleSide(o){ if(!side) return; side.classList.toggle('open', o); ov.classList.toggle('hidden', !o); }
+document.getElementById('burger')?.addEventListener('click', () => toggleSide(!side.classList.contains('open')));
+ov?.addEventListener('click', () => toggleSide(false));
+side?.querySelectorAll('a.sl').forEach(a => a.addEventListener('click', () => toggleSide(false)));
+document.getElementById('collapse-btn')?.addEventListener('click', () => {
+  const v = root.dataset.collapsed === '1' ? '0' : '1'; root.dataset.collapsed = v; ls.set('collapsed', v);
+});
+(function () {  // подсветка текущего раздела
+  const p = location.pathname; let best = null;
+  document.querySelectorAll('a.sl[href]:not([data-noactive])').forEach(a => {
     const h = a.getAttribute('href');
-    if ((h === '/' && p === '/') || (h !== '/' && p.startsWith(h))) {
-      if (!best || h.length > best.getAttribute('href').length) best = a;
-    }
+    if ((h === '/' && p === '/') || (h !== '/' && p.startsWith(h))) { if (!best || h.length > best.getAttribute('href').length) best = a; }
   });
   if (best) best.classList.add('on');
 })();
-// ID последнего показанного уведомления храним в sessionStorage,
-// чтобы при переходах между страницами старые не показывались заново
-let lastId = parseInt(sessionStorage.getItem('lastNotifId') || '0');
+
+// ---- приватность: размытие секретов, показ по клику, копирование
+document.querySelectorAll('[data-privacy-toggle]').forEach(b => b.addEventListener('click', () => {
+  const v = root.dataset.privacy === '1' ? '0' : '1'; root.dataset.privacy = v; ls.set('privacy', v);
+}));
+document.addEventListener('click', e => {
+  const cp = e.target.closest('[data-copy]');
+  if (cp) {
+    e.preventDefault(); e.stopPropagation();
+    const s = cp.closest('.secret-wrap')?.querySelector('[data-secret]');
+    if (s && navigator.clipboard) navigator.clipboard.writeText(s.textContent.trim()).then(() => showToast({level:'success', title:'Скопировано'}));
+    return;
+  }
+  const sec = e.target.closest('[data-secret]');
+  if (sec && root.dataset.privacy === '1') sec.classList.toggle('revealed');
+});
+
+// ---- свои окна подтверждения (<form data-confirm="Текст" data-confirm-tone="primary">)
+const cfm = document.getElementById('cfm');
+function askConfirm(msg, tone) {
+  return new Promise(res => {
+    document.getElementById('cfm-msg').textContent = msg;
+    const yes = document.getElementById('cfm-yes'), no = document.getElementById('cfm-no');
+    yes.className = 'btn ' + (tone === 'primary' ? 'btn-primary' : 'btn-danger');
+    cfm.classList.remove('hidden'); cfm.classList.add('flex'); no.focus();
+    const done = v => { cfm.classList.add('hidden'); cfm.classList.remove('flex'); yes.onclick = no.onclick = cfm.onclick = null; document.removeEventListener('keydown', key); res(v); };
+    const key = ev => { if (ev.key === 'Escape') done(false); };
+    document.addEventListener('keydown', key);
+    yes.onclick = () => done(true); no.onclick = () => done(false); cfm.onclick = ev => { if (ev.target === cfm) done(false); };
+  });
+}
+document.addEventListener('submit', e => {
+  const f = e.target;
+  if (!f.dataset || !f.dataset.confirm || f.dataset.confirmed) return;
+  e.preventDefault();
+  askConfirm(f.dataset.confirm, f.dataset.confirmTone).then(ok => {
+    if (!ok) return;
+    f.dataset.confirmed = '1';
+    f.requestSubmit ? f.requestSubmit(e.submitter || undefined) : f.submit();
+  });
+}, true);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') toggleSide(false); });
+
+// ---- живой поиск и фильтры по статусу ([data-live] ... [data-live-q] [data-live-status] [data-live-item])
+document.querySelectorAll('[data-live]').forEach(box => {
+  const q = box.querySelector('[data-live-q]'), chips = [...box.querySelectorAll('[data-live-status]')];
+  const items = [...box.querySelectorAll('[data-live-item]')], base = items.filter(i => !i.hasAttribute('data-live-dup'));
+  const empty = box.querySelector('[data-live-empty]'); let st = '';
+  const apply = () => {
+    const t = (q?.value || '').trim().toLowerCase(); let n = 0;
+    items.forEach(it => { const ok = (!t || (it.dataset.q || '').includes(t)) && (!st || it.dataset.status === st); it.classList.toggle('live-hide', !ok); if (ok && !it.hasAttribute('data-live-dup')) n++; });
+    empty?.classList.toggle('hidden', n > 0);
+  };
+  q?.addEventListener('input', apply);
+  chips.forEach(c => {
+    const s = c.dataset.liveStatus, k = s ? base.filter(i => i.dataset.status === s).length : base.length;
+    const nn = c.querySelector('[data-n]'); if (nn) nn.textContent = k;
+    if (s && k === 0) c.classList.add('hidden');
+    c.addEventListener('click', () => { st = s; chips.forEach(x => x.classList.toggle('on', x === c)); apply(); });
+  });
+});
+document.addEventListener('keydown', e => {
+  if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { const q = document.querySelector('[data-live-q]'); if (q) { e.preventDefault(); q.focus(); } }
+});
+
+// ---- таблицы -> карточки на телефоне (подписи из <th>)
+document.querySelectorAll('table.tbl').forEach(t => {
+  const heads = [...t.querySelectorAll('thead th')].map(h => h.textContent.trim());
+  t.querySelectorAll('tbody tr').forEach(r => [...r.children].forEach((td, i) => {
+    if (td.colSpan > 1) { td.classList.add('tbl-empty'); return; }
+    if (heads[i]) td.dataset.label = heads[i];
+  }));
+});
+
+// ---- таймеры брони/аренды
+function tick() {
+  const now = Date.now();
+  document.querySelectorAll('.timer').forEach(el => {
+    const t = Date.parse(el.dataset.expire); if (isNaN(t)) return;
+    const d = t - now;
+    if (d <= 0) { el.textContent = '⏳ истекает…'; el.classList.add('animate-pulse'); return; }
+    const h = Math.floor(d / 36e5), m = Math.floor(d % 36e5 / 6e4), s = Math.floor(d % 6e4 / 1e3);
+    el.textContent = '⏳ ' + [h > 0 ? h + 'ч' : '', (m > 0 || h > 0) ? m + 'м' : '', s + 'с'].filter(Boolean).join(' ');
+  });
+}
+setInterval(tick, 1000); tick();
+
+// ---- «набегающие» цифры в карточках статистики
+if (!matchMedia('(prefers-reduced-motion: reduce)').matches) document.querySelectorAll('.stat .num').forEach(el => {
+  const node = [...el.childNodes].find(n => n.nodeType === 3 && /\d/.test(n.nodeValue)); if (!node) return;
+  const m = node.nodeValue.match(/^(\D*)(\d[\d\s]*(?:[.,]\d+)?)([\s\S]*)$/); if (!m) return;
+  const raw = m[2].replace(/\s+$/, ''), tail = m[2].slice(raw.length) + m[3], orig = node.nodeValue;
+  const target = parseFloat(raw.replace(/\s/g, '').replace(',', '.')); if (!isFinite(target) || target === 0) return;
+  const dec = (raw.split(/[.,]/)[1] || '').length, t0 = performance.now();
+  const fmt = v => v.toLocaleString('ru-RU', {minimumFractionDigits: dec, maximumFractionDigits: dec});
+  (function step(t) {
+    const k = Math.min(1, (t - t0) / 700), e = 1 - Math.pow(1 - k, 3);
+    node.nodeValue = k < 1 ? m[1] + fmt(target * e) + tail : orig;
+    if (k < 1) requestAnimationFrame(step);
+  })(t0);
+});
+
+// ---- уведомления
+let lastId = parseInt(ls.get('lastNotifId', '0')) || 0;
 async function pollNotifications() {
   try {
     const r = await fetch(`/api/notifications?since=${lastId}`);
     const events = await r.json();
-    for (const e of events) {
-      lastId = Math.max(lastId, e.id);
-      sessionStorage.setItem('lastNotifId', lastId);
-      showToast(e);
-    }
+    for (const e of events) { lastId = Math.max(lastId, e.id); ls.set('lastNotifId', lastId); showToast(e); }
   } catch (err) {}
   setTimeout(pollNotifications, 10000);
 }
@@ -172,11 +359,14 @@ function showToast(e) {
     warning: "border-purple-500/40 border-l-purple-400 shadow-[0_0_24px_rgba(139,92,246,.3)]",
     danger:  "border-rose-500/30 border-l-rose-400 shadow-[0_0_24px_rgba(251,113,133,.25)]",
   };
-  const div = document.createElement("div");
-  div.style.cssText = "background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.03)),#1c1b22;backdrop-filter:blur(14px);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 18px 36px -12px #000";
+  const div = document.createElement('div');
+  div.style.cssText = 'background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.03)),#1c1b22;backdrop-filter:blur(14px);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 18px 36px -12px #000';
   div.className = `${styles[e.level] || styles.info} border border-l-4 text-ink px-4 py-3 rounded-2xl text-sm transition-all duration-300`;
-  div.innerHTML = `<b>${e.title}</b>${e.text ? `<br><small class="text-muted">${e.text}</small>` : ""}`;
-  document.getElementById("toasts").appendChild(div);
+  const b = document.createElement('b'); b.textContent = e.title || ''; div.appendChild(b);   // textContent: без XSS
+  if (e.text) { div.appendChild(document.createElement('br')); const s = document.createElement('small'); s.className = 'text-muted'; s.textContent = e.text; div.appendChild(s); }
+  if (e.url && String(e.url).startsWith('/')) { div.style.cursor = 'pointer'; div.addEventListener('click', () => { location.href = e.url; }); }
+  const bar = document.createElement('div'); bar.className = 'toast-bar'; div.appendChild(bar);
+  document.getElementById('toasts').appendChild(div);
   setTimeout(() => { div.style.opacity = 0; setTimeout(() => div.remove(), 300); }, 6000);
 }
 {% block poll %}pollNotifications();{% endblock %}

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import avatar %}
+{% from "_macros.html" import avatar, secret %}
 {% block title %}Ожидают одобрения{% endblock %}
 {% block content %}
 <a href="/partners" class="text-sm text-muted hover:text-accent inline-flex items-center gap-1"><i data-lucide="arrow-left" class="w-4 h-4"></i>к дашборду</a>
@@ -28,8 +28,8 @@
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm mb-4">
         <div class="bg-bg rounded-xl p-3 border border-line/60 font-mono break-all" style="box-shadow:inset 0 2px 5px rgba(0,0,0,.5)">
           <div class="label font-sans">Аккаунт</div>
-          <div><span class="text-muted">login:</span> {{ a.login }}</div>
-          <div><span class="text-muted">password:</span> {{ a.password }}</div>
+          <div><span class="text-muted">login:</span> {{ secret(a.login) }}</div>
+          <div><span class="text-muted">password:</span> {{ secret(a.password) }}</div>
           <div><span class="text-muted">Riot ID:</span>
             {% if a.riot_id %}<a href="https://tracker.gg/valorant/profile/riot/{{ a.riot_id|urlencode }}/overview" target="_blank" class="link inline-flex items-center gap-1">{{ a.riot_id }}<i data-lucide="external-link" class="w-3.5 h-3.5"></i></a>{% else %}—{% endif %}</div>
         </div>

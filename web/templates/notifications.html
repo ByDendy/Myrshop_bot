@@ -15,7 +15,7 @@
   {% else %}
     <div class="divide-y divide-line/50">
       {% for e in events %}
-        <div class="p-4 flex items-start gap-3 sm:gap-4 hover:bg-accent/5 transition-colors border-l-4
+        <div {% if e.ts_iso %}data-ts="{{ e.ts_iso }}"{% endif %} class="p-4 flex items-start gap-3 sm:gap-4 hover:bg-accent/5 transition-colors border-l-4
           {% if e.level == 'success' %}border-ok{% elif e.level == 'warning' %}border-accent{% elif e.level == 'danger' %}border-bad{% else %}border-line{% endif %}">
           <div class="mt-0.5 shrink-0">
             {% if e.level == 'success' %}<i data-lucide="check-circle-2" class="w-5 h-5 text-ok"></i>
@@ -29,10 +29,30 @@
             </div>
             {% if e.text %}<div class="text-sm text-muted mt-0.5 break-words">{{ e.text }}</div>{% endif %}
           </div>
-          <div class="text-xs font-mono text-muted whitespace-nowrap">{{ e.ts }}</div>
+          <div class="ts-text text-xs font-mono text-muted whitespace-nowrap">{{ e.ts }}</div>
         </div>
       {% endfor %}
     </div>
   {% endif %}
 </div>
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+  const rows = [...document.querySelectorAll('[data-ts]')]; if (!rows.length) return;
+  const day = d => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(), today = day(new Date());
+  let last = null;
+  rows.forEach(r => {
+    const d = new Date(r.dataset.ts); if (isNaN(d)) return;
+    const k = day(d);
+    const tt = r.querySelector('.ts-text'); if (tt) tt.textContent = d.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
+    if (k !== last) {
+      last = k;
+      const h = document.createElement('div');
+      h.className = 'px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted';
+      h.style.background = 'rgba(255,255,255,.03)';
+      h.textContent = k === today ? 'Сегодня' : k === today - 864e5 ? 'Вчера' : d.toLocaleDateString('ru-RU', {day:'numeric', month:'long'});
+      r.parentNode.insertBefore(h, r);
+    }
+  });
+});
+</script>
 {% endblock %}

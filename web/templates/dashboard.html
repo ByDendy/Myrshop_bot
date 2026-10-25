@@ -32,7 +32,7 @@
       <td class="font-mono text-muted">{{ r.started_at.strftime("%d.%m %H:%M") }}</td>
     </tr>
   {% else %}
-    <tr><td colspan="5" class="py-6 text-center text-muted">Пока нет аренд</td></tr>
+    <tr><td colspan="5"><div class="empty"><span class="chip chip-mute"><i data-lucide="inbox" class="w-4 h-4"></i></span><div>Пока нет аренд</div></div></td></tr>
   {% endfor %}
   </tbody>
 </table></div></div>

@@ -38,7 +38,7 @@
       <td class="text-right"><a href="/partners/{{ p.id }}" class="link inline-flex items-center gap-1 text-xs">открыть<i data-lucide="chevron-right" class="w-4 h-4"></i></a></td>
     </tr>
   {% else %}
-    <tr><td colspan="7" class="py-8 text-center text-muted">Партнёров пока нет</td></tr>
+    <tr><td colspan="7"><div class="empty"><span class="chip chip-mute"><i data-lucide="inbox" class="w-4 h-4"></i></span><div>Партнёров пока нет</div></div></td></tr>
   {% endfor %}
   </tbody>
 </table></div></div>

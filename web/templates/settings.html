@@ -35,7 +35,7 @@
           <td class="font-mono text-accent">{{ r.min_price_6h|round(0)|int }}</td>
           <td class="font-mono text-accent">{{ r.min_price_12h|round(0)|int }}</td>
           <td class="text-right">
-            <form method="post" onsubmit="return confirm('Удалить {{ r.rank }}?')" class="inline">
+            <form method="post" data-confirm="Удалить {{ r.rank }}?" class="inline">
               <input type="hidden" name="action" value="delete_rank">
               <input type="hidden" name="rank_id" value="{{ r.id }}">
               <button class="btn btn-danger btn-sm"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
@@ -91,7 +91,7 @@
             </div>
           </td>
           <td class="text-right align-top">
-            <form method="post" class="inline" onsubmit="return confirm('Удалить менеджера {{ m.login }}?')">
+            <form method="post" class="inline" data-confirm="Удалить менеджера {{ m.login }}?">
               <input type="hidden" name="action" value="delete_manager">
               <input type="hidden" name="manager_id" value="{{ m.id }}">
               <button class="btn btn-danger btn-sm"><i data-lucide="trash-2" class="w-4 h-4"></i>Удалить</button>

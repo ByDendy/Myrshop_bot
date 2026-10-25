@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import status_badge, avatar %}
+{% from "_macros.html" import status_badge, avatar, secret %}
 {% block title %}{{ p.full_name or 'Партнёр' }}{% endblock %}
 {% block content %}
 <a href="/partners/list" class="text-sm text-muted hover:text-accent inline-flex items-center gap-1"><i data-lucide="arrow-left" class="w-4 h-4"></i>к списку</a>
@@ -19,14 +19,14 @@
   </div>
   <div class="flex gap-2 flex-wrap">
     {% if p.status == 'active' %}
-      <form method="post" action="/partners/{{ p.id }}/block" onsubmit="return confirm('Заблокировать партнёра?')">
+      <form method="post" action="/partners/{{ p.id }}/block" data-confirm="Заблокировать партнёра?">
         <button class="btn btn-danger"><i data-lucide="ban" class="w-4 h-4"></i>Заблокировать</button></form>
     {% else %}
       <form method="post" action="/partners/{{ p.id }}/unblock">
         <button class="btn btn-ok"><i data-lucide="check" class="w-4 h-4"></i>Разблокировать</button></form>
     {% endif %}
     {% if p.balance and p.balance > 0 %}
-      <form method="post" action="/partners/{{ p.id }}/payout" onsubmit="return confirm('Выплатить {{ p.balance }} ₽?')">
+      <form method="post" action="/partners/{{ p.id }}/payout" data-confirm-tone="primary" data-confirm="Выплатить {{ p.balance }} ₽?">
         <button class="btn btn-primary"><i data-lucide="wallet" class="w-4 h-4"></i>Выплатить {{ p.balance }} ₽</button></form>
     {% endif %}
   </div>
@@ -49,7 +49,7 @@
 <div class="card mb-6 flex items-center justify-between gap-3 flex-wrap">
   <div class="min-w-0">
     <div class="label flex items-center gap-1.5"><i data-lucide="credit-card" class="w-3.5 h-3.5"></i>Реквизиты для выплат</div>
-    <div id="pd" class="font-mono text-sm break-all">{{ p.payment_details or '— не указаны —' }}</div>
+    <div id="pd" data-secret class="font-mono text-sm break-all">{{ p.payment_details or '— не указаны —' }}</div>
   </div>
   {% if p.payment_details %}
   <button type="button" class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('pd').innerText)"><i data-lucide="copy" class="w-4 h-4"></i>Копировать</button>
@@ -65,13 +65,13 @@
     <tr>
       <td class="font-mono text-muted">{{ a.id }}</td>
       <td class="font-semibold">{{ a.rank }}</td>
-      <td class="font-mono text-xs">{{ a.login }}</td>
+      <td class="font-mono text-xs">{{ secret(a.login, false) }}</td>
       <td>{{ status_badge(a.status) }}</td>
       <td class="text-right font-mono text-xs text-accent">{{ a.price_3h|round(0)|int }} / {{ a.price_6h|round(0)|int }} / {{ a.price_12h|round(0)|int }}</td>
       <td class="text-right"><a href="/accounts/{{ a.id }}" class="link text-xs inline-flex items-center gap-1">открыть<i data-lucide="chevron-right" class="w-4 h-4"></i></a></td>
     </tr>
   {% else %}
-    <tr><td colspan="6" class="py-6 text-center text-muted">Нет аккаунтов</td></tr>
+    <tr><td colspan="6"><div class="empty"><span class="chip chip-mute"><i data-lucide="inbox" class="w-4 h-4"></i></span><div>Нет аккаунтов</div></div></td></tr>
   {% endfor %}
   </tbody>
 </table></div></div>
@@ -96,7 +96,7 @@
       </td>
     </tr>
   {% else %}
-    <tr><td colspan="5" class="py-6 text-center text-muted">Начислений пока нет</td></tr>
+    <tr><td colspan="5"><div class="empty"><span class="chip chip-mute"><i data-lucide="inbox" class="w-4 h-4"></i></span><div>Начислений пока нет</div></div></td></tr>
   {% endfor %}
   </tbody>
 </table></div></div>
@@ -118,7 +118,7 @@
       <td class="text-xs text-muted !whitespace-normal">{{ po.note or '—' }}</td>
     </tr>
   {% else %}
-    <tr><td colspan="4" class="py-6 text-center text-muted">Выплат пока не было</td></tr>
+    <tr><td colspan="4"><div class="empty"><span class="chip chip-mute"><i data-lucide="inbox" class="w-4 h-4"></i></span><div>Выплат пока не было</div></div></td></tr>
   {% endfor %}
   </tbody>
 </table></div></div>

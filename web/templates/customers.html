@@ -4,13 +4,26 @@
 {% block content %}
 <h1 class="text-2xl font-bold mb-4 flex items-center gap-2"><i data-lucide="users-round" class="text-accent"></i>Покупатели</h1>
 
+<div data-live>
+<div class="flex flex-wrap items-center gap-3 mb-4">
+  <div class="relative flex-1 min-w-[14rem] max-w-sm">
+    <i data-lucide="search" class="w-4 h-4 text-muted absolute left-4 top-1/2 -translate-y-1/2"></i>
+    <input data-live-q type="search" placeholder="Поиск: имя, @username, TG ID…  ( / )" class="input !pl-10">
+  </div>
+  <div class="seg">
+    <button type="button" data-live-status="" class="on">Все <span data-n class="font-mono text-xs opacity-70"></span></button>
+    <button type="button" data-live-status="active">Активные <span data-n class="font-mono text-xs opacity-70"></span></button>
+    <button type="button" data-live-status="banned">Забаненные <span data-n class="font-mono text-xs opacity-70"></span></button>
+  </div>
+</div>
+
 <div class="card p-0 overflow-hidden"><div class="overflow-x-auto">
 <table class="tbl">
   <thead><tr><th>TG ID</th><th>Имя / @username</th><th class="!text-right">Потратил</th><th class="!text-right">Аренд</th><th class="!text-right">Часов</th><th>Статус</th><th></th></tr></thead>
   <tbody>
   {% for row in customers %}
     {% set c = row.customer %}
-    <tr {% if c.is_banned %}style="background:linear-gradient(90deg,rgba(251,113,133,.10),transparent)"{% endif %}>
+    <tr data-live-item data-q="{{ ((c.telegram_id|string) ~ ' ' ~ (c.first_name or '') ~ ' ' ~ (c.username or ''))|lower }}" data-status="{{ 'banned' if c.is_banned else 'active' }}" {% if c.is_banned %}style="background:linear-gradient(90deg,rgba(251,113,133,.10),transparent)"{% endif %}>
       <td class="font-mono text-xs text-muted">{{ c.telegram_id }}</td>
       <td><div class="flex items-center gap-3">
         {{ avatar(c.avatar_id, c.first_name) }}
@@ -24,8 +37,10 @@
       <td class="text-right"><a href="/customers/{{ c.telegram_id }}" class="link inline-flex items-center gap-1 text-xs">открыть<i data-lucide="chevron-right" class="w-4 h-4"></i></a></td>
     </tr>
   {% else %}
-    <tr><td colspan="7" class="py-8 text-center text-muted">Покупателей пока нет</td></tr>
+    <tr><td colspan="7"><div class="empty"><span class="chip chip-mute"><i data-lucide="inbox" class="w-4 h-4"></i></span><div>Покупателей пока нет</div></div></td></tr>
   {% endfor %}
   </tbody>
 </table></div></div>
+<div data-live-empty class="hidden card mt-3"><div class="empty"><span class="chip chip-mute"><i data-lucide="search-x" class="w-4 h-4"></i></span><div>Ничего не найдено</div></div></div>
+</div>
 {% endblock %}
