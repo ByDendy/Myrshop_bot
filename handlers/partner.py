@@ -36,7 +36,7 @@ class EditPaymentDetails(StatesGroup):
     wait_text = State()
 
 
-class ChangePassword(StatesGroup):
+class PartnerChangePassword(StatesGroup):
     new_password = State()
 
 
@@ -268,7 +268,7 @@ async def partner_change_password_start(callback: CallbackQuery, state: FSMConte
         )
         return
 
-    await state.set_state(ChangePassword.new_password)
+    await state.set_state(PartnerPartnerChangePassword.new_password)
     await state.update_data(acc_id=acc_id)
     await callback.message.delete()
     await callback.message.answer(
@@ -280,7 +280,7 @@ async def partner_change_password_start(callback: CallbackQuery, state: FSMConte
     )
 
 
-@router.message(ChangePassword.new_password)
+@router.message(PartnerChangePassword.new_password)
 async def partner_change_password_save(message: Message, state: FSMContext, session):
     data = await state.get_data()
     acc_id = data["acc_id"]
