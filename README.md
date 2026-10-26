@@ -100,8 +100,8 @@ text
 #### 1. Клонирование репозитория
 
 ```bash
-git clone https://github.com/your-username/varendy-bot.git
-cd varendy-bot
+git clone https://github.com/ByDendy/VARendy.git
+cd VARendy
 ```
 2. Виртуальное окружение
 bash
@@ -146,7 +146,7 @@ python bot.py
 
 📂 Структура проекта
 text
-varendy-bot/
+VARendy/
 ├── bot.py                    # точка входа
 ├── config.py                 # переменные окружения
 ├── requirements.txt
@@ -351,8 +351,8 @@ Styling	Tailwind CSS (CDN)
 🚀 Installation
 1. Clone
 bash
-git clone https://github.com/your-username/varendy-bot.git
-cd varendy-bot
+git clone https://github.com/ByDendy/VARendy.git
+cd VARendy
 2. Virtual environment
 bash
 python -m venv venv
@@ -396,7 +396,7 @@ Web panel is available at http://localhost:8080
 
 📂 Project Structure
 text
-varendy-bot/
+VARendy/
 ├── bot.py                    # entrypoint
 ├── config.py                 # env vars
 ├── requirements.txt
