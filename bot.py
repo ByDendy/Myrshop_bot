@@ -78,7 +78,7 @@ async def main():
         except Exception as e:
             logging.error(f"❌ Веб-панель не запустилась: {e}")
 
-    logging.info("✅ MyrShop запущен")
+    logging.info("✅ VARendy запущен")
     await dp.start_polling(bot)
 
 

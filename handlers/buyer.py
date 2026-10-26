@@ -465,7 +465,7 @@ async def handle_payment(
         await session.commit()
 
         try:
-            title = f"MyrShop #{account.id} ({account.rank}) — {hours}ч"
+            title = f"VARendy #{account.id} ({account.rank}) — {hours}ч"
             if promo_discount > 0:
                 title += f" (промо −{promo_discount:.0f}₽)"
             data = await cryptobot.create_invoice(price, title)

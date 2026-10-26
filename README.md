@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🎮 MyrShop — Valorant Account Rental
+# 🎮 VARendy — Valorant Account Rental
 
 **Telegram-бот + веб-панель для аренды аккаунтов Valorant**
 Автоматизация оплаты, выдачи и учёта аренды через **FunPay** и **CryptoBot**
@@ -20,7 +20,7 @@
 
 ### 📖 О проекте
 
-**MyrShop** — это полностью автоматизированная система аренды игровых аккаунтов **Valorant** с двумя интерфейсами:
+**VARendy** — это полностью автоматизированная система аренды игровых аккаунтов **Valorant** с двумя интерфейсами:
 
 - 🤖 **Telegram-бот** — для покупателей: выбор ранга, срока аренды (3/6/12 часов), способа оплаты.
 - 🖥 **Веб-панель** — для администратора: управление аккаунтами, статистика продаж, уведомления в реальном времени.
@@ -100,8 +100,8 @@ text
 #### 1. Клонирование репозитория
 
 ```bash
-git clone https://github.com/your-username/myrshop-bot.git
-cd myrshop-bot
+git clone https://github.com/your-username/varendy-bot.git
+cd varendy-bot
 ```
 2. Виртуальное окружение
 bash
@@ -118,7 +118,7 @@ env
 # Telegram
 BOT_TOKEN=1234567890:ABCdefGHIjklMNOpqrSTUvwxyz
 ADMIN_IDS=8792910093
-SUPPORT_USERNAME=@myrshop_support
+SUPPORT_USERNAME=@varendy_support
 
 # FunPay
 FUNPAY_GOLDEN_KEY=your_golden_key_here
@@ -146,7 +146,7 @@ python bot.py
 
 📂 Структура проекта
 text
-myrshop-bot/
+varendy-bot/
 ├── bot.py                    # точка входа
 ├── config.py                 # переменные окружения
 ├── requirements.txt
@@ -233,8 +233,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 CMD ["python", "bot.py"]
 bash
-docker build -t myrshop .
-docker run -d --env-file .env -p 8080:8080 myrshop
+docker build -t varendy .
+docker run -d --env-file .env -p 8080:8080 varendy
 🔐 Безопасность
 Все секреты — только в переменных окружения, никогда в коде
 
@@ -266,7 +266,7 @@ MIT — используйте как хотите, но без гарантий
 </div>
 🇬🇧 English
 📖 About
-MyrShop is a fully automated Valorant account rental system with two interfaces:
+VARendy is a fully automated Valorant account rental system with two interfaces:
 
 🤖 Telegram bot — for buyers: pick a rank, duration (3/6/12 hours), payment method.
 
@@ -351,8 +351,8 @@ Styling	Tailwind CSS (CDN)
 🚀 Installation
 1. Clone
 bash
-git clone https://github.com/your-username/myrshop-bot.git
-cd myrshop-bot
+git clone https://github.com/your-username/varendy-bot.git
+cd varendy-bot
 2. Virtual environment
 bash
 python -m venv venv
@@ -368,7 +368,7 @@ env
 # Telegram
 BOT_TOKEN=1234567890:ABCdefGHIjklMNOpqrSTUvwxyz
 ADMIN_IDS=8792910093
-SUPPORT_USERNAME=@myrshop_support
+SUPPORT_USERNAME=@varendy_support
 
 # FunPay
 FUNPAY_GOLDEN_KEY=your_golden_key_here
@@ -396,7 +396,7 @@ Web panel is available at http://localhost:8080
 
 📂 Project Structure
 text
-myrshop-bot/
+varendy-bot/
 ├── bot.py                    # entrypoint
 ├── config.py                 # env vars
 ├── requirements.txt
@@ -473,8 +473,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 CMD ["python", "bot.py"]
 bash
-docker build -t myrshop .
-docker run -d --env-file .env -p 8080:8080 myrshop
+docker build -t varendy .
+docker run -d --env-file .env -p 8080:8080 varendy
 🔐 Security
 All secrets live in env vars, never in code
 

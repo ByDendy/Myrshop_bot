@@ -53,7 +53,7 @@ async def partner_main(callback: CallbackQuery, session):
     if not partner:
         await callback.message.delete()
         await callback.message.answer(
-            "🤝 *Партнёрская программа MyrShop*\n\n"
+            "🤝 *Партнёрская программа VARendy*\n\n"
             "Сдавай свои аккаунты Valorant в аренду через нашу платформу "
             "и получай *90%* с каждой аренды.\n\n"
             "*Что ты получаешь:*\n"

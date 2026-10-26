@@ -15,12 +15,12 @@ from services.referral_service import bind_referral
 router = Router()
 
 WELCOME_TEXT = (
-    "Добро пожаловать в MyrShop — аренда аккаунтов Valorant! 👋\n\n"
+    "Добро пожаловать в VARendy — аренда аккаунтов Valorant! 👋\n\n"
     "Выберите действие:"
 )
 
 ONBOARDING_TEXT = (
-    "👋 Добро пожаловать в MyrShop!\n\n"
+    "👋 Добро пожаловать в VARendy!\n\n"
     "Перед началом работы, пожалуйста, ознакомьтесь с документами:\n\n"
     "📄 Политика конфиденциальности\n"
     "📋 Согласие на обработку персональных данных\n"
@@ -116,7 +116,7 @@ async def back_to_main(callback: CallbackQuery, state: FSMContext):
 async def show_support(callback: CallbackQuery):
     await callback.message.delete()
     await callback.message.answer(
-        "🛟 Поддержка MyrShop\n\n"
+        "🛟 Поддержка VARendy\n\n"
         f"По всем вопросам пишите: {SUPPORT_USERNAME}\n\n"
         "Время ответа: до 30 минут.",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
