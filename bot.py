@@ -8,7 +8,7 @@ from config import BOT_TOKEN, FUNPAY_AUTO_LOTS_ENABLED, WEB_PORT, WEB_ADMIN_PASS
 from database.session import init_db, async_session
 from services.funpay_service import FunPayService
 from services.cryptobot_service import CryptoBotService
-from handlers import start, buyer, admin, partner
+from handlers import start, buyer, admin, partner, profile
 from handlers.rental_checker import rental_checker_loop
 from handlers.payment_checker import payment_checker_loop
 from handlers.reservation_checker import reservation_checker_loop
@@ -19,6 +19,7 @@ from web.server import create_web_app
 
 logging.basicConfig(level=logging.INFO)
 
+_tasks = []
 
 async def main():
     if not BOT_TOKEN:
@@ -49,20 +50,22 @@ async def main():
     dp.include_router(buyer.router)
     dp.include_router(admin.router)
     dp.include_router(partner.router)
+    dp.include_router(profile.router) # <--- ИСПРАВЛЕНИЕ ПУНКТА 5
 
     await init_db()
 
-    asyncio.create_task(rental_checker_loop(bot))
-    asyncio.create_task(payment_checker_loop(bot))
-    asyncio.create_task(reservation_checker_loop(cryptobot))
-    # asyncio.create_task(funpay_watcher_loop(bot, funpay))  # отключён из-за бана FunPay
-    asyncio.create_task(avatar_updater_loop(bot))
-
+    _tasks.append(asyncio.create_task(rental_checker_loop(bot)))
+    _tasks.append(asyncio.create_task(payment_checker_loop(bot)))
+    _tasks.append(asyncio.create_task(reservation_checker_loop(cryptobot)))
+    _tasks.append(asyncio.create_task(avatar_updater_loop(bot)))
+    
+    # Отключаем funpay_watcher и lot_manager, если в Railway стоит FUNPAY_AUTO_LOTS_ENABLED=false
     if FUNPAY_AUTO_LOTS_ENABLED:
-        asyncio.create_task(lot_manager_loop(funpay))
+        _tasks.append(asyncio.create_task(funpay_watcher_loop(bot, funpay))) # Включаем только вместе с лотами
+        _tasks.append(asyncio.create_task(lot_manager_loop(funpay)))
         logging.info("✅ Автосоздание лотов FunPay: ВКЛЮЧЕНО")
     else:
-        logging.warning("⚠️ Автосоздание лотов FunPay: ВЫКЛЮЧЕНО")
+        logging.warning("⚠️ Автосоздание лотов FunPay: ВЫКЛЮЧЕНО (и watcher отключён)")
 
     if web_enabled:
         try:

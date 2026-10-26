@@ -44,6 +44,11 @@ class Account(Base):
     payment_invoice_id: Mapped[str] = mapped_column(String(100), nullable=True)
     promo_id: Mapped[int] = mapped_column(Integer, nullable=True)
     promo_discount: Mapped[float] = mapped_column(Float, nullable=True)
+    
+    # Новые поля для корректного списания
+    final_price: Mapped[float] = mapped_column(Float, nullable=True)
+    bonus_spent: Mapped[float] = mapped_column(Float, nullable=True)
+
     buyer_id: Mapped[int] = mapped_column(BigInteger, nullable=True)
     rental_hours: Mapped[int] = mapped_column(Integer, nullable=True)
     rented_until: Mapped[datetime] = mapped_column(DateTime, nullable=True)

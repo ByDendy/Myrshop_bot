@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timedelta
 from sqlalchemy import select
 
-from database.models import Account, RentalHistory
+from database.models import Account, RentalHistory, Customer, BonusTransaction
 from database.session import async_session
 from services.cryptobot_service import CryptoBotService
 from services.notifications import notify_admin
@@ -41,7 +41,8 @@ async def payment_checker_loop(bot):
                     elif status == "expired":
                         await _release_account(session, acc, "счёт истёк")
                     elif status is None:
-                        age = datetime.utcnow() - acc.created_at
+                        # ИСПОЛЬЗУЕМ reserved_at, А НЕ created_at
+                        age = datetime.utcnow() - (acc.reserved_at or acc.created_at)
                         if age > timedelta(seconds=EXPIRE_TIMEOUT):
                             await _release_account(session, acc, "таймаут")
 
@@ -52,6 +53,18 @@ async def payment_checker_loop(bot):
 
 
 async def _release_account(session, acc: Account, reason: str):
+    # ВОЗВРАЩАЕМ БОНУСЫ
+    if acc.buyer_id and acc.bonus_spent and acc.bonus_spent > 0:
+        cust = await session.get(Customer, acc.buyer_id)
+        if cust:
+            cust.bonus_balance = round(cust.bonus_balance + acc.bonus_spent, 2)
+            session.add(BonusTransaction(
+                customer_id=acc.buyer_id,
+                amount=acc.bonus_spent,
+                type="refund",
+                description=f"Возврат бонусов за неоплаченный заказ #{acc.id}"
+            ))
+
     acc.status = "free"
     acc.buyer_id = None
     acc.rental_hours = None
@@ -59,20 +72,22 @@ async def _release_account(session, acc: Account, reason: str):
     acc.reserved_at = None
     acc.promo_id = None
     acc.promo_discount = None
+    acc.final_price = None
+    acc.bonus_spent = None
     await session.commit()
     logging.info(f"Аккаунт #{acc.id} освобождён ({reason})")
 
 
 async def _deliver_account(bot, session, acc: Account):
     hours = acc.rental_hours or 3
-    price = {
+    # БЕРЕМ СОХРАНЕННУЮ ИТОГОВУЮ ЦЕНУ, которую мы рассчитали в buyer.py
+    final_price = acc.final_price or {
         3: acc.price_3h,
         6: acc.price_6h,
         12: acc.price_12h,
     }.get(hours, acc.price_3h)
-
+    
     discount = acc.promo_discount or 0
-    final_price = round(max(0, price - discount), 2)
 
     acc.status = "rented"
     acc.rented_until = datetime.utcnow() + timedelta(hours=hours)

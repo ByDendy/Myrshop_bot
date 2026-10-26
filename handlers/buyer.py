@@ -389,6 +389,8 @@ async def handle_payment(
         account.rented_until = datetime.utcnow() + timedelta(hours=hours)
         account.reserved_at = None
         account.payment_invoice_id = None
+        account.final_price = price
+        account.bonus_spent = bonus_spent
         if promo_id > 0:
             account.promo_id = promo_id
             account.promo_discount = promo_discount
@@ -455,6 +457,8 @@ async def handle_payment(
         account.buyer_id = callback.from_user.id
         account.rental_hours = hours
         account.reserved_at = datetime.utcnow()
+        account.final_price = price
+        account.bonus_spent = bonus_spent
         if promo_id > 0:
             account.promo_id = promo_id
             account.promo_discount = promo_discount
@@ -472,6 +476,7 @@ async def handle_payment(
             account.payment_invoice_id = str(invoice["invoice_id"])
             await session.commit()
             
+            # СПИСЫВАЕМ БОНУСЫ ЗДЕСЬ, чтобы зарезервировать их
             if bonus_spent > 0:
                 await apply_bonus_spend(session, callback.from_user.id, bonus_spent, f"Оплата аренды #{account.id}")
 
@@ -496,6 +501,8 @@ async def handle_payment(
             account.reserved_at = None
             account.promo_id = None
             account.promo_discount = None
+            account.final_price = None
+            account.bonus_spent = None
             await session.commit()
             await callback.message.delete()
             await callback.message.answer(

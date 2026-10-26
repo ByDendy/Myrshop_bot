@@ -137,12 +137,13 @@ async def auth_middleware(request, handler):
     user = request["user"]
     if not user["all_perms"]:
         perms = user["perms"]
+        # Узкие права проверяем ДО общего /partners, иначе они недостижимы
+        if request.path.startswith("/partners/passwords") and not perms.get("can_check_passwords"): raise web.HTTPForbidden()
+        if request.path.startswith("/partners/payouts") and not perms.get("can_pay_partners"): raise web.HTTPForbidden()
+        if request.path.startswith("/partners") and not perms.get("can_manage_partners"): raise web.HTTPForbidden()
         if request.path == "/" and not perms.get("can_view_dashboard"): raise web.HTTPForbidden()
         if request.path.startswith("/accounts") and not perms.get("can_edit_accounts"): raise web.HTTPForbidden()
         if request.path.startswith("/customers") and not perms.get("can_ban_customers"): raise web.HTTPForbidden()
-        if request.path.startswith("/partners") and not perms.get("can_manage_partners"): raise web.HTTPForbidden()
-        if request.path.startswith("/partners/passwords") and not perms.get("can_check_passwords"): raise web.HTTPForbidden()
-        if request.path.startswith("/partners/payouts") and not perms.get("can_pay_partners"): raise web.HTTPForbidden()
         if request.path.startswith("/settings") and not perms.get("can_edit_settings"): raise web.HTTPForbidden()
 
     return await handler(request)
@@ -200,6 +201,21 @@ async def logout(request: web.Request):
     resp = web.HTTPFound("/login")
     resp.del_cookie("session")
     raise resp
+
+
+async def privacy_page(request: web.Request):
+    html = env.get_template("privacy.html").render()
+    return web.Response(text=html, content_type="text/html")
+
+
+async def consent_page(request: web.Request):
+    html = env.get_template("consent.html").render()
+    return web.Response(text=html, content_type="text/html")
+
+
+async def terms_page(request: web.Request):
+    html = env.get_template("terms.html").render()
+    return web.Response(text=html, content_type="text/html")
 
 
 async def partner_portal(request: web.Request):
@@ -1020,6 +1036,11 @@ def create_web_app(bot):
     app.router.add_get("/logout", logout)
     app.router.add_get("/partner-auth", partner_auth)
     app.router.add_get("/partner-portal", partner_portal)
+
+    # Юридические документы (публичные, см. public_paths в auth_middleware)
+    app.router.add_get("/privacy", privacy_page)
+    app.router.add_get("/consent", consent_page)
+    app.router.add_get("/terms", terms_page)
 
     app.router.add_get("/", dashboard)
     app.router.add_get("/accounts", accounts_list)

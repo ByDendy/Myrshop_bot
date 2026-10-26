@@ -13,6 +13,7 @@ from keyboards.inline import admin_payments_keyboard
 from services.settings_service import get_setting, set_setting
 from services.funpay_service import FunPayService
 from services.partner_service import on_rental_ended
+from services.referral_service import process_referral_rewards
 from handlers.lot_manager import run_lot_manager_cycle
 from web import notifications
 from config import ADMIN_IDS
@@ -104,8 +105,6 @@ async def toggle_test_mode(callback: CallbackQuery, session):
     await callback.message.edit_reply_markup(reply_markup=await admin_menu(session))
 
 
-# ---------- ЗАВЕРШЕНИЕ ВСЕХ АРЕНД ----------
-
 @router.callback_query(F.data == "admin_end_all_rentals")
 async def end_all_rentals(callback: CallbackQuery, session, funpay: FunPayService):
     result = await session.execute(select(Account).where(Account.status == "rented"))
@@ -118,7 +117,6 @@ async def end_all_rentals(callback: CallbackQuery, session, funpay: FunPayServic
 
     now = datetime.utcnow()
     for acc in rented:
-        # Закрываем историю аренды
         hist = (await session.execute(
             select(RentalHistory).where(
                 RentalHistory.account_id == acc.id,
@@ -130,10 +128,9 @@ async def end_all_rentals(callback: CallbackQuery, session, funpay: FunPayServic
             hist.ended_at = now
             hist.ended_reason = "manual"
 
-        # Размораживаем партнёрские начисления
         await on_rental_ended(session, acc)
+        await process_referral_rewards(session, acc) # <--- НАЧИСЛЯЕМ РЕФЕРАЛЬНЫЕ БОНУСЫ
 
-        # Меняем статус аккаунта
         if acc.partner_id:
             acc.status = "awaiting_review"
         else:
@@ -142,7 +139,6 @@ async def end_all_rentals(callback: CallbackQuery, session, funpay: FunPayServic
         acc.last_rental_ended_at = now
         await session.commit()
 
-        # Уведомление партнёру
         if acc.partner_id:
             partner = await session.get(Partner, acc.partner_id)
             if partner and partner.telegram_id:
@@ -169,8 +165,6 @@ async def end_all_rentals(callback: CallbackQuery, session, funpay: FunPayServic
     await callback.message.edit_reply_markup(reply_markup=await admin_menu(session))
     await _trigger_lot_manager(funpay)
 
-
-# ---------- ДОБАВЛЕНИЕ ----------
 
 @router.callback_query(F.data == "admin_add")
 async def add_start(callback: CallbackQuery, state: FSMContext):
@@ -242,8 +236,6 @@ async def add_prices(message: Message, state: FSMContext, session, funpay: FunPa
     await message.answer(f"✅ Аккаунт #{account.id} добавлен!", reply_markup=await admin_menu(session))
     await _trigger_lot_manager(funpay)
 
-
-# ---------- МАССОВАЯ ЗАГРУЗКА ----------
 
 @router.callback_query(F.data == "admin_bulk")
 async def bulk_start(callback: CallbackQuery, state: FSMContext):
@@ -318,8 +310,6 @@ async def bulk_process(message: Message, state: FSMContext, session, funpay: Fun
         await message.answer("⏳ Создаю лоты…")
         await _trigger_lot_manager(funpay)
 
-
-# ---------- СПИСОК / УДАЛЕНИЕ / ОЖИДАНИЕ ----------
 
 @router.callback_query(F.data == "admin_list")
 async def list_accounts(callback: CallbackQuery, session):
@@ -409,17 +399,8 @@ async def awaiting_menu(callback: CallbackQuery, session):
 
 
 @router.callback_query(F.data.startswith("chpw|"))
-async def change_password_start(callback: CallbackQuery, state: FSMContext, session):
+async def change_password_start(callback: CallbackQuery, state: FSMContext):
     acc_id = int(callback.data.split("|")[1])
-    account = await session.get(Account, acc_id)
-    
-    if account and account.partner_id:
-        await callback.answer(
-            "Это партнёрский аккаунт. Партнёр сам сменит пароль через бота.",
-            show_alert=True,
-        )
-        return
-    
     await state.update_data(acc_id=acc_id)
     await state.set_state(ChangePassword.new_password)
     await callback.message.delete()
@@ -431,19 +412,6 @@ async def change_password_save(message: Message, state: FSMContext, session, fun
     data = await state.get_data()
     acc_id = data["acc_id"]
     account = await session.get(Account, acc_id)
-
-    # 🛡️ ЗАЩИТА: не обрабатываем партнёрские аккаунты — их меняет партнёр через бота
-    if account and account.partner_id:
-        await message.answer(
-            "❌ Это партнёрский аккаунт.\n\n"
-            "Партнёр должен сам сменить пароль через бота:\n"
-            "«🤝 Партнёрам» → «📁 Мои аккаунты» → «🔑 Сменить пароль».\n\n"
-            "Затем вы подтвердите пароль в разделе «🤝 Партнёры → 🔍 Пароли».",
-            reply_markup=await admin_menu(session),
-        )
-        await state.clear()
-        return
-
     if account:
         account.password = message.text.strip()
         account.status = "free"
@@ -457,8 +425,6 @@ async def change_password_save(message: Message, state: FSMContext, session, fun
     await message.answer(f"✅ Пароль для #{acc_id} обновлён.", reply_markup=await admin_menu(session))
     await _trigger_lot_manager(funpay)
 
-
-# ---------- ОПЛАТА / ШАБЛОН ----------
 
 @router.callback_query(F.data == "admin_payments")
 async def payments_menu(callback: CallbackQuery, session):
@@ -477,7 +443,7 @@ async def toggle_payment(callback: CallbackQuery, session):
         await session.commit()
     result = await session.execute(select(PaymentMethod).order_by(PaymentMethod.order))
     methods = result.scalars().all()
-    await callback.answer(f"{method.name} теперь {'включён' if method.enabled else 'выключен'}")
+    await callback.answer(f"{method.name if method else '?'} теперь {'включён' if method and method.enabled else 'выключен'}")
     await callback.message.edit_reply_markup(reply_markup=admin_payments_keyboard(methods))
 
 

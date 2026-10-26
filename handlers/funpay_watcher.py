@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from datetime import datetime, timedelta
 from sqlalchemy import select
 
@@ -93,6 +94,7 @@ async def funpay_watcher_loop(bot, funpay: FunPayService):
                     account.rented_until = datetime.utcnow() + timedelta(hours=hours)
                     account.payment_invoice_id = None
                     account.reserved_at = None
+                    account.final_price = price
 
                     rental = RentalHistory(
                         account_id=account.id,
@@ -103,7 +105,7 @@ async def funpay_watcher_loop(bot, funpay: FunPayService):
                         started_at=datetime.utcnow(),
                     )
                     session.add(rental)
-                    await session.flush()  # получаем rental.id
+                    await session.flush()
                     await session.commit()
 
                     if account.partner_id:
@@ -149,11 +151,12 @@ async def funpay_watcher_loop(bot, funpay: FunPayService):
 
 
 def _parse_lot_description(desc: str):
+    """Regex-парсер, который работает даже если в тексте есть лишние символы."""
     try:
-        if "ранга" in desc and " на " in desc and "час" in desc:
-            rank = desc.split("ранга ")[1].split(" на ")[0].strip()
-            hours = int(desc.split(" на ")[1].split(" час")[0].strip())
-            return rank, hours
+        # Ищем: "ранга <что угодно> на <цифры> час"
+        match = re.search(r"ранга (.+?) на (\d+) час", desc)
+        if match:
+            return match.group(1).strip(), int(match.group(2))
     except Exception:
         pass
     return None, None

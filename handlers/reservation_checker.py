@@ -2,7 +2,7 @@ import asyncio
 import logging
 from datetime import datetime, timedelta
 from sqlalchemy import select
-from database.models import Account
+from database.models import Account, Customer, BonusTransaction
 from database.session import async_session
 from services.cryptobot_service import CryptoBotService
 
@@ -44,12 +44,30 @@ async def reservation_checker_loop(cryptobot: CryptoBotService):
                             )
                             continue
 
+                    # Возвращаем бонусы, списанные при создании счёта (buyer.handle_payment)
+                    if acc.buyer_id and acc.bonus_spent and acc.bonus_spent > 0:
+                        cust = await session.get(Customer, acc.buyer_id)
+                        if cust:
+                            cust.bonus_balance = round(
+                                (cust.bonus_balance or 0) + acc.bonus_spent, 2
+                            )
+                            session.add(BonusTransaction(
+                                customer_id=acc.buyer_id,
+                                amount=acc.bonus_spent,
+                                type="refund",
+                                description=f"Возврат бонусов за неоплаченную бронь #{acc.id}",
+                            ))
+
                     acc.status = "free"
                     acc.buyer_id = None
                     acc.rental_hours = None
                     acc.payment_invoice_id = None
                     acc.reserved_at = None
                     acc.lot_id = None
+                    acc.promo_id = None
+                    acc.promo_discount = None
+                    acc.final_price = None
+                    acc.bonus_spent = None
                     logging.info(
                         f"Резерв #{acc.id} истёк ({RESERVE_TIMEOUT_MIN} мин), "
                         f"аккаунт освобождён"

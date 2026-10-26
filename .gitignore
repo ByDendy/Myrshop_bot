@@ -1,0 +1,25 @@
+# Секреты и локальные данные
+.env
+.secrets/
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Кэш Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Тестовые/черновые копии (обрезанный server.py — не для деплоя)
+test/
+
+# Логи и прочее
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -36,8 +36,10 @@ class FunPayService:
 
         tier_label = "💎 Premium" if tier == "premium" else "🟢 Standard"
         title = f"Valorant {tier_label} {rank} — аренда {hours}ч"
+        
+        # ВАЖНО: Убрали tier_label из описания, чтобы парсер нашел точный ранг
         description = (
-            f"Аренда аккаунта Valorant ранга {rank} ({tier_label}) на {hours} часов.\n"
+            f"Аренда аккаунта Valorant ранга {rank} на {hours} часов.\n"
             f"После оплаты данные придут в чат автоматически."
         )
 
