@@ -1,146 +1,280 @@
 {% extends "base.html" %}
 {% block title %}Настройки{% endblock %}
 {% block content %}
-<h1 class="text-2xl font-bold mb-6 flex items-center gap-2"><i data-lucide="settings" class="text-accent"></i>Настройки</h1>
+<h1 class="text-2xl font-bold mb-6">⚙️ Настройки</h1>
 
-{% if error %}<div class="alert alert-bad mb-4">{{ error }}</div>{% endif %}
-{% if success %}<div class="alert alert-ok mb-4">{{ success }}</div>{% endif %}
+{% if error %}
+  <div class="bg-rose-900/30 text-rose-300 p-3 rounded mb-4 border border-rose-500/30 text-sm">
+    {{ error }}
+  </div>
+{% endif %}
+{% if success %}
+  <div class="bg-emerald-900/30 text-emerald-300 p-3 rounded mb-4 border border-emerald-500/30 text-sm">
+    {{ success }}
+  </div>
+{% endif %}
 
-<div class="card !p-6 mb-4">
-  <h2 class="text-lg font-semibold mb-4 flex items-center gap-2"><span class="chip !w-8 !h-8"><i data-lucide="percent" class="w-4 h-4"></i></span>Комиссия платформы</h2>
+<!-- Блок 1: Комиссия платформы -->
+<div class="card p-6 mb-6">
+  <h2 class="text-lg font-bold mb-4">💰 Комиссия платформы</h2>
   <form method="post" class="flex flex-wrap items-end gap-4">
     <input type="hidden" name="action" value="save_commission">
     <div>
-      <label class="label">Платформе (%)</label>
-      <input type="number" id="commission" name="commission" value="{{ commission }}" min="0" max="100" step="0.1" class="input !w-32 font-mono">
+      <label class="text-sm text-muted block mb-1">Платформе (%)</label>
+      <input type="number" name="commission" value="{{ commission }}" min="0" max="100" step="0.1" class="input font-mono w-32">
     </div>
-    <div class="text-sm text-muted pb-2">Партнёру: <b id="share" class="num text-ok text-base">{{ partner_share }}</b><b class="text-ok">%</b></div>
-    <button class="btn btn-primary"><i data-lucide="save" class="w-4 h-4"></i>Сохранить</button>
+    <div class="text-sm text-muted pb-2">
+      Партнёру: <b class="text-emerald-500">{{ partner_share }}%</b>
+    </div>
+    <button class="btn btn-primary">Сохранить</button>
   </form>
   <p class="text-xs text-muted mt-3">Изменение не влияет на уже оформленные аренды. Новые аренды — по новой ставке.</p>
 </div>
 
-<div class="card !p-6">
-  <h2 class="text-lg font-semibold mb-4 flex items-center gap-2"><span class="chip !w-8 !h-8"><i data-lucide="trophy" class="w-4 h-4"></i></span>Минимальные цены по рангам</h2>
-
+<!-- Блок 2: Минимальные цены по рангам -->
+<div class="card p-6 mb-6">
+  <h2 class="text-lg font-bold mb-4">🏆 Минимальные цены по рангам</h2>
   {% if ranks %}
-  <div class="rounded-xl border border-line/60 overflow-hidden mb-4"><div class="overflow-x-auto">
-    <table class="tbl">
-      <thead><tr><th>Ранг</th><th>3ч ₽</th><th>6ч ₽</th><th>12ч ₽</th><th></th></tr></thead>
-      <tbody>
+  <div class="overflow-hidden border border-line rounded-lg mb-4">
+    <table class="w-full text-sm text-left">
+      <thead class="bg-surface border-b border-line">
+        <tr>
+          <th class="px-3 py-2">Ранг</th>
+          <th class="px-3 py-2">3ч ₽</th>
+          <th class="px-3 py-2">6ч ₽</th>
+          <th class="px-3 py-2">12ч ₽</th>
+          <th class="px-3 py-2"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-line/50">
       {% for r in ranks %}
         <tr>
-          <td class="font-semibold">{{ r.rank }}</td>
-          <td class="font-mono text-accent">{{ r.min_price_3h|round(0)|int }}</td>
-          <td class="font-mono text-accent">{{ r.min_price_6h|round(0)|int }}</td>
-          <td class="font-mono text-accent">{{ r.min_price_12h|round(0)|int }}</td>
-          <td class="text-right">
-            <form method="post" data-confirm="Удалить {{ r.rank }}?" class="inline">
+          <td class="px-3 py-2 font-medium">{{ r.rank }}</td>
+          <td class="px-3 py-2 font-mono">{{ r.min_price_3h|round(0)|int }}</td>
+          <td class="px-3 py-2 font-mono">{{ r.min_price_6h|round(0)|int }}</td>
+          <td class="px-3 py-2 font-mono">{{ r.min_price_12h|round(0)|int }}</td>
+          <td class="px-3 py-2 text-right">
+            <form method="post" onsubmit="return confirm('Удалить {{ r.rank }}?')" class="inline">
               <input type="hidden" name="action" value="delete_rank">
               <input type="hidden" name="rank_id" value="{{ r.id }}">
-              <button class="btn btn-danger btn-sm"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+              <button class="text-rose-500 hover:text-rose-400 text-sm underline">🗑</button>
             </form>
           </td>
         </tr>
       {% endfor %}
       </tbody>
     </table>
-  </div></div>
+  </div>
   {% else %}
   <p class="text-muted text-sm mb-4">Ранги не настроены. Добавь первый.</p>
   {% endif %}
 
-  <form method="post" class="border-t border-line/60 pt-4 grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
+  <form method="post" class="border-t border-line/50 pt-4 grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
     <input type="hidden" name="action" value="add_rank">
-    <div class="col-span-2 md:col-span-1"><label class="label">Ранг</label><input name="rank" required placeholder="Diamond 1" class="input"></div>
-    <div><label class="label">3ч ₽</label><input name="price_3h" type="number" required min="1" step="1" class="input font-mono"></div>
-    <div><label class="label">6ч ₽</label><input name="price_6h" type="number" required min="1" step="1" class="input font-mono"></div>
-    <div><label class="label">12ч ₽</label><input name="price_12h" type="number" required min="1" step="1" class="input font-mono"></div>
-    <button class="btn btn-ok col-span-2 md:col-span-1"><i data-lucide="plus" class="w-4 h-4"></i>Добавить</button>
+    <div>
+      <label class="text-sm text-muted block mb-1">Ранг</label>
+      <input name="rank" required placeholder="Diamond 1" class="input w-full">
+    </div>
+    <div>
+      <label class="text-sm text-muted block mb-1">3ч ₽</label>
+      <input name="price_3h" type="number" required min="1" step="1" class="input w-full font-mono">
+    </div>
+    <div>
+      <label class="text-sm text-muted block mb-1">6ч ₽</label>
+      <input name="price_6h" type="number" required min="1" step="1" class="input w-full font-mono">
+    </div>
+    <div>
+      <label class="text-sm text-muted block mb-1">12ч ₽</label>
+      <input name="price_12h" type="number" required min="1" step="1" class="input w-full font-mono">
+    </div>
+    <button class="btn !bg-emerald-600 hover:!bg-emerald-500 text-white">+ Добавить</button>
   </form>
-  <p class="text-xs text-muted mt-3">Если ранг с таким названием уже есть — обновятся его цены.</p>
 </div>
-{% if user.all_perms %}
-<div class="card !p-6 mt-4">
-  <h2 class="text-lg font-semibold mb-4 flex items-center gap-2"><span class="chip !w-8 !h-8"><i data-lucide="users-round" class="w-4 h-4"></i></span>Команда (менеджеры)</h2>
 
-  {% if managers %}
-  <div class="rounded-xl border border-white/10 overflow-hidden mb-6"><div class="overflow-x-auto">
-    <table class="tbl">
-      <thead><tr><th>Логин</th><th>Права</th><th class="!text-right">Действия</th></tr></thead>
-      <tbody>
-      {% for m in managers %}
+<!-- Блок 3: Реферальная система -->
+<div class="card p-6 mb-6">
+  <h2 class="text-lg font-bold mb-4">🎁 Реферальная программа</h2>
+  <form method="post" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <input type="hidden" name="action" value="save_referral">
+    
+    <div class="md:col-span-2 flex items-center gap-3">
+      <input type="checkbox" name="referral_enabled" id="ref_enabled" {% if ref_enabled %}checked{% endif %} class="w-5 h-5 accent-accent">
+      <label for="ref_enabled" class="text-sm font-medium">Включить реферальную программу</label>
+    </div>
+
+    <div>
+      <label class="text-sm text-muted block mb-1">Приветственная скидка рефералу (%)</label>
+      <input name="referral_welcome_discount" type="number" step="0.1" min="0" max="100" value="{{ welcome_disc }}" class="input font-mono">
+    </div>
+    <div>
+      <label class="text-sm text-muted block mb-1">Макс. % бонусов при оплате</label>
+      <input name="max_bonus_percent" type="number" step="0.1" min="0" max="100" value="{{ max_bonus }}" class="input font-mono">
+    </div>
+
+    <div class="md:col-span-2">
+      <button class="btn btn-primary">Сохранить настройки</button>
+    </div>
+  </form>
+  <p class="text-xs text-muted mt-3">
+    Реферер получает <b>10%</b> от 1-го заказа друга и <b>+5 ₽</b> за каждый из следующих 10 заказов.
+    Бонусы начисляются после окончания аренды.
+  </p>
+</div>
+
+<!-- Блок 4: Промокоды -->
+<div class="card p-6 mb-6">
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="text-lg font-bold">🎟 Промокоды</h2>
+  </div>
+
+  {% if promocodes %}
+  <div class="overflow-hidden border border-line rounded-lg mb-6">
+    <table class="w-full text-sm text-left">
+      <thead class="bg-surface border-b border-line">
         <tr>
-          <td class="font-mono font-semibold align-top">{{ m.login }}</td>
-          <td class="!whitespace-normal">
-            <div class="flex flex-wrap gap-1.5">
-              {% for key, label in [
-          ('can_view_dashboard','Дашборд'),
-          ('can_edit_accounts','Аккаунты'),
-          ('can_manage_partners','Партнёры'),
-          ('can_check_passwords','Пароли'),
-          ('can_pay_partners','Выплаты'),
-          ('can_ban_customers','Покупатели'),
-          ('can_edit_settings','Настройки')] %}
-                {% if m.permissions and ('"' ~ key ~ '": true') in m.permissions %}
-                  <span class="badge b-free"><i data-lucide="check" class="w-3 h-3"></i>{{ label }}</span>
-                {% else %}
-                  <span class="badge text-gray-500 border-white/10 bg-white/[0.03] line-through decoration-gray-600"><i data-lucide="minus" class="w-3 h-3"></i>{{ label }}</span>
-                {% endif %}
-              {% endfor %}
-            </div>
+          <th class="px-3 py-2">Код</th>
+          <th class="px-3 py-2">Скидка</th>
+          <th class="px-3 py-2">Условие</th>
+          <th class="px-3 py-2">Исп.</th>
+          <th class="px-3 py-2">До</th>
+          <th class="px-3 py-2">Статус</th>
+          <th class="px-3 py-2 text-right"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-line/50">
+      {% for p in promocodes %}
+        <tr>
+          <td class="px-3 py-2 font-mono font-bold">{{ p.code }}</td>
+          <td class="px-3 py-2 font-mono">
+            {% if p.discount_type == "percent" %}{{ p.discount_value|round(0)|int }}%{% else %}{{ p.discount_value|round(0)|int }}₽{% endif %}
           </td>
-          <td class="text-right align-top">
-            <form method="post" class="inline" data-confirm="Удалить менеджера {{ m.login }}?">
-              <input type="hidden" name="action" value="delete_manager">
-              <input type="hidden" name="manager_id" value="{{ m.id }}">
-              <button class="btn btn-danger btn-sm"><i data-lucide="trash-2" class="w-4 h-4"></i>Удалить</button>
+          <td class="px-3 py-2 text-xs">
+            {% if p.condition_type == "first_order" %}🆕 Первый заказ
+            {% elif p.condition_type == "rental_12h" %}⏱ Только 12ч
+            {% else %}🔄 Любой{% endif %}
+          </td>
+          <td class="px-3 py-2 font-mono text-xs">{{ p.used_count }}/{% if p.max_uses == 0 %}∞{% else %}{{ p.max_uses }}{% endif %}</td>
+          <td class="px-3 py-2 text-xs text-muted">{{ p.valid_until.strftime('%d.%m.%Y') }}</td>
+          <td class="px-3 py-2 text-xs">
+            {% if not p.active %}🔴 выкл
+            {% elif p.max_uses > 0 and p.used_count >= p.max_uses %}⚫ исчерпан
+            {% else %}🟢 активен{% endif %}
+          </td>
+          <td class="px-3 py-2 text-right whitespace-nowrap">
+            <form method="post" action="/settings/promo/toggle/{{ p.id }}" class="inline">
+              <button class="text-accent text-sm underline hover:no-underline">{{ 'Выкл' if p.active else 'Вкл' }}</button>
+            </form>
+            <form method="post" action="/settings/promo/delete/{{ p.id }}" onsubmit="return confirm('Удалить промокод {{ p.code }}?')" class="inline ml-2">
+              <button class="text-rose-500 text-sm underline hover:no-underline">🗑</button>
             </form>
           </td>
         </tr>
       {% endfor %}
       </tbody>
     </table>
-  </div></div>
+  </div>
+  {% else %}
+  <p class="text-muted text-sm mb-4">Промокодов пока нет.</p>
   {% endif %}
 
-  <form method="post" class="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-white/10 pt-4">
-    <input type="hidden" name="action" value="add_manager">
-    <div class="md:col-span-2"><h3 class="font-semibold text-sm text-accent flex items-center gap-2"><i data-lucide="user-plus" class="w-4 h-4"></i>Добавить нового менеджера</h3></div>
-    <div><label class="label">Логин</label><input name="login" required class="input"></div>
-    <div><label class="label">Пароль</label><input name="password" type="text" required class="input font-mono"></div>
-
-    <div class="md:col-span-2">
-      <div class="label">Права доступа</div>
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-      {% for name, label, icon in [
-      ('can_view_dashboard','Видеть дашборд','layout-dashboard'),
-      ('can_edit_accounts','Редактировать аккаунты','pencil'),
-      ('can_manage_partners','Управлять партнёрами','handshake'),
-      ('can_check_passwords','Проверять пароли','search-check'),
-      ('can_pay_partners','Выплачивать партнёрам','wallet'),
-      ('can_ban_customers','Банить покупателей','ban'),
-      ('can_edit_settings','Менять настройки','settings')] %}
-        <label class="cursor-pointer relative block">
-          <input type="checkbox" name="{{ name }}" class="peer sr-only">
-          <div class="tier !py-2.5 peer-checked:border-purple-500 peer-checked:shadow-glow peer-focus-visible:ring-2 peer-focus-visible:ring-purple-500/60">
-            <span class="chip chip-mute !w-8 !h-8"><i data-lucide="{{ icon }}" class="w-4 h-4"></i></span>
-            <span class="text-sm">{{ label }}</span>
-          </div>
-          <i data-lucide="check-circle-2" class="w-5 h-5 text-accent absolute right-3 top-1/2 -translate-y-1/2 opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none"></i>
-        </label>
-      {% endfor %}
-      </div>
+  <form method="post" action="/settings/promo/add" class="border-t border-line/50 pt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+    <div>
+      <label class="text-sm text-muted block mb-1">Код</label>
+      <input name="code" required placeholder="SUMMER15" class="input font-mono uppercase">
     </div>
+    <div>
+      <label class="text-sm text-muted block mb-1">Тип скидки</label>
+      <select name="discount_type" class="input">
+        <option value="percent">Процент (%)</option>
+        <option value="fixed">Фиксированная (₽)</option>
+      </select>
+    </div>
+    <div>
+      <label class="text-sm text-muted block mb-1">Размер скидки</label>
+      <input name="discount_value" required type="number" step="0.01" min="0.01" class="input font-mono">
+    </div>
+    <div>
+      <label class="text-sm text-muted block mb-1">Условие активации</label>
+      <select name="condition_type" class="input">
+        <option value="any_order">Любой заказ</option>
+        <option value="first_order">Только первый заказ</option>
+        <option value="rental_12h">Только аренда 12ч</option>
+      </select>
+    </div>
+    <div>
+      <label class="text-sm text-muted block mb-1">Лимит активаций (0 = ∞)</label>
+      <input name="max_uses" required type="number" min="0" value="0" class="input font-mono">
+    </div>
+    <div>
+      <label class="text-sm text-muted block mb-1">Действует до</label>
+      <input name="valid_until" required type="datetime-local" class="input">
+    </div>
+    <div class="md:col-span-2">
+      <button class="btn !bg-emerald-600 hover:!bg-emerald-500 text-white">+ Создать промокод</button>
+    </div>
+  </form>
+</div>
 
-    <div class="md:col-span-2"><button class="btn btn-primary"><i data-lucide="user-plus" class="w-4 h-4"></i>Создать менеджера</button></div>
+<!-- Блок 5: Управление менеджерами -->
+{% if user.all_perms %}
+<div class="card p-6">
+  <h2 class="text-lg font-bold mb-4">👥 Команда (Менеджеры)</h2>
+  
+  {% if managers %}
+  <div class="overflow-hidden border border-line rounded-lg mb-6">
+    <table class="w-full text-sm text-left">
+      <thead class="bg-surface border-b border-line">
+        <tr>
+          <th class="px-4 py-3">Логин</th>
+          <th class="px-4 py-3">Права</th>
+          <th class="px-4 py-3 text-right">Действия</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-line/50">
+      {% for m in managers %}
+        <tr>
+          <td class="px-4 py-3 font-mono">{{ m.login }}</td>
+          <td class="px-4 py-3 text-xs text-muted space-y-0.5">
+            <div>{% if m.permissions and '"can_view_dashboard": true' in m.permissions %}✅{% else %}⬜{% endif %} Дашборд</div>
+            <div>{% if m.permissions and '"can_edit_accounts": true' in m.permissions %}✅{% else %}⬜{% endif %} Аккаунты</div>
+            <div>{% if m.permissions and '"can_manage_partners": true' in m.permissions %}✅{% else %}⬜{% endif %} Партнёры</div>
+            <div>{% if m.permissions and '"can_check_passwords": true' in m.permissions %}✅{% else %}⬜{% endif %} Пароли</div>
+            <div>{% if m.permissions and '"can_pay_partners": true' in m.permissions %}✅{% else %}⬜{% endif %} Выплаты</div>
+            <div>{% if m.permissions and '"can_ban_customers": true' in m.permissions %}✅{% else %}⬜{% endif %} Покупатели</div>
+            <div>{% if m.permissions and '"can_edit_settings": true' in m.permissions %}✅{% else %}⬜{% endif %} Настройки</div>
+          </td>
+          <td class="px-4 py-3 text-right">
+            <form method="post" class="inline">
+              <input type="hidden" name="action" value="delete_manager">
+              <input type="hidden" name="manager_id" value="{{ m.id }}">
+              <button class="text-rose-500 hover:underline text-sm">Удалить</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <form method="post" class="border-t border-line pt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+    <input type="hidden" name="action" value="add_manager">
+    <div class="md:col-span-2"><h3 class="font-bold text-sm text-accent">Добавить нового менеджера</h3></div>
+    <div><label class="text-sm text-muted">Логин</label><input name="login" required class="input"></div>
+    <div><label class="text-sm text-muted">Пароль</label><input name="password" type="text" required class="input font-mono"></div>
+    
+    <div class="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+      <label class="flex items-center gap-2 cursor-pointer text-sm"><input type="checkbox" name="can_view_dashboard" class="w-4 h-4 accent-accent"> Видеть дашборд</label>
+      <label class="flex items-center gap-2 cursor-pointer text-sm"><input type="checkbox" name="can_edit_accounts" class="w-4 h-4 accent-accent"> Редактировать аккаунты</label>
+      <label class="flex items-center gap-2 cursor-pointer text-sm"><input type="checkbox" name="can_manage_partners" class="w-4 h-4 accent-accent"> Управлять партнёрами</label>
+      <label class="flex items-center gap-2 cursor-pointer text-sm"><input type="checkbox" name="can_check_passwords" class="w-4 h-4 accent-accent"> Проверять пароли</label>
+      <label class="flex items-center gap-2 cursor-pointer text-sm"><input type="checkbox" name="can_pay_partners" class="w-4 h-4 accent-accent"> Выплачивать партнёрам</label>
+      <label class="flex items-center gap-2 cursor-pointer text-sm"><input type="checkbox" name="can_ban_customers" class="w-4 h-4 accent-accent"> Банить покупателей</label>
+      <label class="flex items-center gap-2 cursor-pointer text-sm"><input type="checkbox" name="can_edit_settings" class="w-4 h-4 accent-accent"> Менять настройки</label>
+    </div>
+    
+    <div class="md:col-span-2"><button class="btn btn-primary">Создать менеджера</button></div>
   </form>
 </div>
 {% endif %}
-<script>
-document.getElementById('commission').addEventListener('input', e => {
-  const v = parseFloat(e.target.value);
-  if (!isNaN(v)) document.getElementById('share').textContent = (Math.round((100 - v) * 10) / 10).toString();
-});
-</script>
 {% endblock %}
