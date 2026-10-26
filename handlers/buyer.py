@@ -1,11 +1,14 @@
 from aiogram import Router, F
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.context import FSMContext
 from sqlalchemy import select, distinct
 from datetime import datetime, timedelta
-from database.models import Account, PaymentMethod, RentalHistory, Customer
+from database.models import Account, PaymentMethod, RentalHistory, Customer, Promocode
 from keyboards.inline import (
     tiers_keyboard, ranks_keyboard, accounts_keyboard,
-    rental_keyboard, payment_methods_keyboard,
+    rental_keyboard, rent_step_keyboard,
+    payment_methods_keyboard, payment_methods_with_promo_keyboard,
 )
 from services.funpay_service import FunPayService
 from services.cryptobot_service import CryptoBotService
@@ -13,10 +16,15 @@ from services.settings_service import get_setting
 from services.notifications import notify_admin
 from services.partner_service import on_rental_started
 from services.avatar_service import refresh_avatar
+from services.promo_service import validate_promo, record_promo_use
 from web import notifications
 from config import SUPPORT_USERNAME
 
 router = Router()
+
+
+class PromoCode(StatesGroup):
+    wait_code = State()
 
 
 async def _get_enabled_methods(session):
@@ -128,17 +136,135 @@ async def rent_account(callback: CallbackQuery, session):
     if not account or account.status != "free":
         await callback.answer("Этот аккаунт уже занят!", show_alert=True)
         return
+
     price = {3: account.price_3h, 6: account.price_6h, 12: account.price_12h}[hours]
-    methods = await _get_enabled_methods(session)
-    if not methods:
-        await callback.answer("😔 Способы оплаты временно недоступны.", show_alert=True)
-        return
+
     await callback.message.delete()
     await callback.message.answer(
         f"Аккаунт #{account.id} ({account.rank})\n"
-        f"Аренда на {hours} ч — {price:.0f} ₽\n\n"
+        f"Аренда на {hours} ч\n\n"
+        f"💰 Сумма: {price:.0f} ₽\n\n"
+        f"Есть промокод? Примените его перед оплатой.",
+        reply_markup=rent_step_keyboard(acc_id, hours),
+    )
+
+
+@router.callback_query(F.data.startswith("apply_promo|"))
+async def apply_promo_start(callback: CallbackQuery, state: FSMContext, session):
+    _, acc_id_str, hours_str = callback.data.split("|")
+
+    methods = await _get_enabled_methods(session)
+    if not any(m.code == "cryptobot" for m in methods):
+        await callback.answer(
+            "Промокоды доступны только при оплате через CryptoBot. "
+            "Сейчас этот способ отключён.",
+            show_alert=True,
+        )
+        return
+
+    await state.set_state(PromoCode.wait_code)
+    await state.update_data(acc_id=int(acc_id_str), hours=int(hours_str))
+    await callback.message.delete()
+    await callback.message.answer(
+        "🎟 *Введите промокод* одним сообщением.\n\n"
+        "Например: `SUMMER15`",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"rent|{acc_id_str}|{hours_str}")],
+        ]),
+    )
+
+
+@router.message(PromoCode.wait_code)
+async def apply_promo_process(message: Message, state: FSMContext, session):
+    code = (message.text or "").strip().upper()
+    data = await state.get_data()
+    acc_id = data.get("acc_id")
+    hours = data.get("hours")
+
+    if not acc_id or not hours:
+        await message.answer("❌ Ошибка: сессия устарела. Начните заново.")
+        await state.clear()
+        return
+
+    account = await session.get(Account, acc_id)
+    if not account or account.status != "free":
+        await message.answer("❌ Аккаунт больше не доступен. Начните заново.")
+        await state.clear()
+        return
+
+    price = {3: account.price_3h, 6: account.price_6h, 12: account.price_12h}[hours]
+    promo, discount, error = await validate_promo(
+        session, code, message.from_user.id, hours, price
+    )
+
+    if error:
+        await message.answer(
+            f"❌ *{error}*\n\n"
+            f"Попробуйте другой код или нажмите «Отмена».",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="❌ Отмена", callback_data=f"rent|{acc_id}|{hours}")],
+            ]),
+        )
+        return
+
+    final_price = round(price - discount, 2)
+    await state.clear()
+
+    methods = await _get_enabled_methods(session)
+    await message.answer(
+        f"✅ Промокод *{promo.code}* применён!\n\n"
+        f"💰 Скидка: {discount:.0f} ₽\n"
+        f"💵 К оплате: *{final_price:.0f} ₽* (вместо {price:.0f} ₽)\n\n"
         f"Выберите способ оплаты:",
-        reply_markup=payment_methods_keyboard(methods, acc_id, hours),
+        parse_mode="Markdown",
+        reply_markup=payment_methods_with_promo_keyboard(
+            methods, acc_id, hours, promo.id
+        ),
+    )
+
+
+@router.callback_query(F.data.startswith("choose_method|"))
+async def choose_method(callback: CallbackQuery, session):
+    _, acc_id_str, hours_str, promo_id_str = callback.data.split("|")
+    acc_id = int(acc_id_str)
+    hours = int(hours_str)
+    promo_id = int(promo_id_str)
+
+    account = await session.get(Account, acc_id)
+    if not account or account.status != "free":
+        await callback.answer("Этот аккаунт уже занят!", show_alert=True)
+        return
+
+    price = {3: account.price_3h, 6: account.price_6h, 12: account.price_12h}[hours]
+    promo_text = ""
+
+    if promo_id > 0:
+        result = await session.execute(select(Promocode).where(Promocode.id == promo_id))
+        promo = result.scalar_one_or_none()
+        if promo:
+            _, discount, error = await validate_promo(
+                session, promo.code, callback.from_user.id, hours, price
+            )
+            if not error:
+                price = round(price - discount, 2)
+                promo_text = f"\n🎟 Промокод: *{promo.code}* (−{discount:.0f} ₽)"
+            else:
+                promo_id = 0
+                promo_text = "\n⚠️ Промокод больше не действует"
+
+    methods = await _get_enabled_methods(session)
+    await callback.message.delete()
+    await callback.message.answer(
+        f"Аккаунт #{account.id} ({account.rank})\n"
+        f"Аренда на {hours} ч\n\n"
+        f"💰 Сумма: *{price:.0f} ₽*{promo_text}\n\n"
+        f"Выберите способ оплаты:",
+        parse_mode="Markdown",
+        reply_markup=payment_methods_with_promo_keyboard(
+            methods, acc_id, hours, promo_id
+        ),
     )
 
 
@@ -149,13 +275,28 @@ async def handle_payment(
     funpay: FunPayService,
     cryptobot: CryptoBotService,
 ):
-    _, acc_id_str, hours_str, method_code = callback.data.split("|")
+    parts = callback.data.split("|")
+    if len(parts) == 5:
+        _, acc_id_str, hours_str, method_code, promo_id_str = parts
+        promo_id = int(promo_id_str)
+    else:
+        _, acc_id_str, hours_str, method_code = parts
+        promo_id = 0
+
     acc_id = int(acc_id_str)
     hours = int(hours_str)
     account = await session.get(Account, acc_id)
 
     if not account or account.status != "free":
         await callback.answer("Этот аккаунт уже занят!", show_alert=True)
+        return
+
+    if promo_id > 0 and method_code == "funpay":
+        await callback.answer(
+            "Промокод применяется только при оплате через CryptoBot. "
+            "Выберите CryptoBot или вернитесь назад.",
+            show_alert=True,
+        )
         return
 
     cust = await session.get(Customer, callback.from_user.id)
@@ -194,7 +335,22 @@ async def handle_payment(
         await callback.answer("Этот способ оплаты недоступен", show_alert=True)
         return
 
-    price = {3: account.price_3h, 6: account.price_6h, 12: account.price_12h}[hours]
+    original_price = {3: account.price_3h, 6: account.price_6h, 12: account.price_12h}[hours]
+    price = original_price
+    discount = 0
+
+    if promo_id > 0 and method_code == "cryptobot":
+        result = await session.execute(select(Promocode).where(Promocode.id == promo_id))
+        promo = result.scalar_one_or_none()
+        if promo:
+            _, discount, error = await validate_promo(
+                session, promo.code, callback.from_user.id, hours, original_price
+            )
+            if not error:
+                price = round(original_price - discount, 2)
+            else:
+                discount = 0
+                promo_id = 0
 
     test_mode = await get_setting(session, "test_mode", "0")
     if test_mode == "1":
@@ -204,6 +360,9 @@ async def handle_payment(
         account.rented_until = datetime.utcnow() + timedelta(hours=hours)
         account.reserved_at = None
         account.payment_invoice_id = None
+        if promo_id > 0:
+            account.promo_id = promo_id
+            account.promo_discount = discount
 
         rental = RentalHistory(
             account_id=account.id,
@@ -220,8 +379,16 @@ async def handle_payment(
         if account.partner_id:
             await on_rental_started(session, account, rental.id, price)
 
-        notifications.push("🧪 Тестовая аренда", f"#{account.id} · {account.rank} · {hours}ч", level="warning")
+        if promo_id > 0:
+            await record_promo_use(session, account, "test")
 
+        notifications.push(
+            "🧪 Тестовая аренда",
+            f"#{account.id} · {account.rank} · {hours}ч",
+            level="warning",
+        )
+
+        promo_line = f"\n🎟 Промокод: −{discount:.0f} ₽" if discount > 0 else ""
         text = (
             f"⚠️ **ТЕСТОВЫЙ РЕЖИМ**\n"
             f"Оплата пропущена, аккаунт выдан!\n\n"
@@ -229,6 +396,7 @@ async def handle_payment(
             f"Логин: `{account.login}`\n"
             f"Пароль: `{account.password}`\n"
             f"Ранг: {account.rank}\n\n"
+            f"💰 Оплачено: {price:.0f} ₽{promo_line}\n\n"
             f"⏱ Аренда до: {account.rented_until.strftime('%d.%m.%Y %H:%M')} UTC"
         )
         await callback.message.delete()
@@ -250,10 +418,15 @@ async def handle_payment(
         account.buyer_id = callback.from_user.id
         account.rental_hours = hours
         account.reserved_at = datetime.utcnow()
+        if promo_id > 0:
+            account.promo_id = promo_id
+            account.promo_discount = discount
         await session.commit()
 
         try:
             title = f"MyrShop #{account.id} ({account.rank}) — {hours}ч"
+            if discount > 0:
+                title += f" (промо −{discount:.0f}₽)"
             data = await cryptobot.create_invoice(price, title)
             if not data.get("ok"):
                 raise RuntimeError(data.get("error", "неизвестная ошибка"))
@@ -262,9 +435,10 @@ async def handle_payment(
             account.payment_invoice_id = str(invoice["invoice_id"])
             await session.commit()
 
+            promo_line = f"\n🎟 Промокод: −{discount:.0f} ₽" if discount > 0 else ""
             text = (
                 f"✅ Аккаунт #{account.id} зарезервирован на {hours} ч!\n\n"
-                f"💰 Сумма: {price:.0f} ₽\n"
+                f"💰 Сумма: *{price:.0f} ₽*{promo_line}\n"
                 f"🪙 Оплата через CryptoBot\n\n"
                 f"🔗 Ссылка на оплату: {invoice['bot_invoice_url']}\n\n"
                 f"⏱ Счёт действует 15 минут.\n"
@@ -275,6 +449,8 @@ async def handle_payment(
             account.buyer_id = None
             account.rental_hours = None
             account.reserved_at = None
+            account.promo_id = None
+            account.promo_discount = None
             await session.commit()
             await callback.message.delete()
             await callback.message.answer(
@@ -287,4 +463,4 @@ async def handle_payment(
         return
 
     await callback.message.delete()
-    await callback.message.answer(text)
+    await callback.message.answer(text, parse_mode="Markdown")
