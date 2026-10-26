@@ -5,6 +5,7 @@ from sqlalchemy import select
 from database.models import Account, RentalHistory
 from database.session import async_session
 from services.partner_service import on_rental_ended
+from services.referral_service import process_referral_rewards
 from web import notifications
 from config import ADMIN_IDS
 
@@ -23,7 +24,6 @@ async def rental_checker_loop(bot):
                 expired = result.scalars().all()
 
                 for acc in expired:
-                    # Закрываем RentalHistory
                     hist = (await session.execute(
                         select(RentalHistory).where(
                             RentalHistory.account_id == acc.id,
@@ -35,14 +35,13 @@ async def rental_checker_loop(bot):
                         hist.ended_at = now
                         hist.ended_reason = "expired"
 
-                    # Размораживаем партнёрские деньги
                     await on_rental_ended(session, acc)
+                    await process_referral_rewards(session, acc)
 
-                    # Меняем статус аккаунта
                     if acc.partner_id:
-                        acc.status = "awaiting_review"  # партнёр сменит пароль
+                        acc.status = "awaiting_review"
                     else:
-                        acc.status = "awaiting_password_change"  # админ сменит
+                        acc.status = "awaiting_password_change"
 
                     acc.last_rental_ended_at = now
                     await session.commit()
@@ -54,7 +53,6 @@ async def rental_checker_loop(bot):
                         category="partner" if acc.partner_id else "general",
                     )
 
-                    # Уведомление партнёру
                     if acc.partner_id:
                         from database.models import Partner
                         partner = await session.get(Partner, acc.partner_id)
@@ -65,16 +63,12 @@ async def rental_checker_loop(bot):
                                     f"⏰ *Аренда окончена*\n\n"
                                     f"Аккаунт #{acc.id} · {acc.rank}\n\n"
                                     f"Смени пароль от Riot Games и отправь его через "
-                                    f"«🤝 Партнёрам» → «📁 Мои аккаунты» → «Сменить пароль».\n\n"
-                                    f"После этого аккаунт вернётся в магазин.",
+                                    f"«🤝 Партнёрам» → «📁 Мои аккаунты» → «Сменить пароль».",
                                     parse_mode="Markdown",
                                 )
                             except Exception as e:
-                                logging.warning(
-                                    f"Не смог уведомить партнёра {partner.telegram_id}: {e}"
-                                )
+                                logging.warning(f"Не смог уведомить партнёра {partner.telegram_id}: {e}")
                     else:
-                        # Мои аккаунты — уведомляем админа
                         for admin_id in ADMIN_IDS:
                             try:
                                 await bot.send_message(
