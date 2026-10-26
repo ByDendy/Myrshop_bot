@@ -4,6 +4,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 def main_menu():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Магазин 🛒", callback_data="shop")],
+        [InlineKeyboardButton(text="👤 Профиль", callback_data="profile")],
         [InlineKeyboardButton(text="Партнёрам 🤝", callback_data="partner_main")],
         [InlineKeyboardButton(text="Поддержка 🛟", callback_data="support")],
     ])
@@ -63,7 +64,6 @@ def rental_keyboard(acc):
 
 
 def rent_step_keyboard(acc_id: int, hours: int):
-    """Экран перед оплатой: применить промокод или перейти к оплате."""
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
             text="🎟 Применить промокод",
@@ -81,7 +81,6 @@ def rent_step_keyboard(acc_id: int, hours: int):
 
 
 def payment_methods_keyboard(methods: list, acc_id: int, hours: int):
-    """Обычная клавиатура без промокода (fallback, если промо не нужно)."""
     buttons = []
     for m in methods:
         buttons.append([InlineKeyboardButton(
@@ -94,7 +93,6 @@ def payment_methods_keyboard(methods: list, acc_id: int, hours: int):
 
 
 def payment_methods_with_promo_keyboard(methods: list, acc_id: int, hours: int, promo_id: int):
-    """Клавиатура со способами оплаты, если выбран промокод."""
     buttons = []
     for m in methods:
         buttons.append([InlineKeyboardButton(
@@ -118,8 +116,6 @@ def admin_payments_keyboard(methods: list):
     buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="admin_menu")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-
-# ─── Партнёрская программа ───
 
 def partner_not_registered_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
