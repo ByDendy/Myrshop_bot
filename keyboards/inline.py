@@ -62,14 +62,48 @@ def rental_keyboard(acc):
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+def rent_step_keyboard(acc_id: int, hours: int):
+    """Экран перед оплатой: применить промокод или перейти к оплате."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="🎟 Применить промокод",
+            callback_data=f"apply_promo|{acc_id}|{hours}",
+        )],
+        [InlineKeyboardButton(
+            text="▶️ Перейти к оплате",
+            callback_data=f"choose_method|{acc_id}|{hours}|0",
+        )],
+        [InlineKeyboardButton(
+            text="◀️ Назад",
+            callback_data=f"view|{acc_id}",
+        )],
+    ])
+
+
 def payment_methods_keyboard(methods: list, acc_id: int, hours: int):
+    """Обычная клавиатура без промокода (fallback, если промо не нужно)."""
     buttons = []
     for m in methods:
         buttons.append([InlineKeyboardButton(
-            text=m.name, callback_data=f"pay|{acc_id}|{hours}|{m.code}",
+            text=m.name, callback_data=f"pay|{acc_id}|{hours}|{m.code}|0",
         )])
     buttons.append([InlineKeyboardButton(
         text="◀️ Назад", callback_data=f"view|{acc_id}",
+    )])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def payment_methods_with_promo_keyboard(methods: list, acc_id: int, hours: int, promo_id: int):
+    """Клавиатура со способами оплаты, если выбран промокод."""
+    buttons = []
+    for m in methods:
+        buttons.append([InlineKeyboardButton(
+            text=m.name,
+            callback_data=f"pay|{acc_id}|{hours}|{m.code}|{promo_id}",
+        )])
+    buttons.append([InlineKeyboardButton(
+        text="◀️ Назад",
+        callback_data=f"rent|{acc_id}|{hours}",
     )])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
