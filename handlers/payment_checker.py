@@ -8,6 +8,7 @@ from database.session import async_session
 from services.cryptobot_service import CryptoBotService
 from services.notifications import notify_admin
 from services.partner_service import on_rental_started
+from services.promo_service import record_promo_use
 from web import notifications
 
 
@@ -56,6 +57,8 @@ async def _release_account(session, acc: Account, reason: str):
     acc.rental_hours = None
     acc.payment_invoice_id = None
     acc.reserved_at = None
+    acc.promo_id = None
+    acc.promo_discount = None
     await session.commit()
     logging.info(f"Аккаунт #{acc.id} освобождён ({reason})")
 
@@ -68,6 +71,9 @@ async def _deliver_account(bot, session, acc: Account):
         12: acc.price_12h,
     }.get(hours, acc.price_3h)
 
+    discount = acc.promo_discount or 0
+    final_price = round(max(0, price - discount), 2)
+
     acc.status = "rented"
     acc.rented_until = datetime.utcnow() + timedelta(hours=hours)
     acc.payment_invoice_id = None
@@ -77,36 +83,40 @@ async def _deliver_account(bot, session, acc: Account):
         account_id=acc.id,
         buyer_id=acc.buyer_id,
         method="cryptobot",
-        amount=price,
+        amount=final_price,
         hours=hours,
         started_at=datetime.utcnow(),
     )
     session.add(rental)
-    await session.flush()  # получаем rental.id
+    await session.flush()
     await session.commit()
 
-    # Начисляем партнёру (если аккаунт партнёрский)
     if acc.partner_id:
-        await on_rental_started(session, acc, rental.id, price)
+        await on_rental_started(session, acc, rental.id, final_price)
+
+    if acc.promo_id:
+        await record_promo_use(session, acc, "cryptobot")
 
     notifications.push(
         "Новая аренда (CryptoBot)",
-        f"#{acc.id} · {acc.rank} · {hours}ч · {price:.0f} ₽",
+        f"#{acc.id} · {acc.rank} · {hours}ч · {final_price:.0f} ₽",
         level="success",
         category="partner" if acc.partner_id else "general",
     )
 
+    promo_line = f"\n🎟 Промокод: −{discount:.0f} ₽" if discount > 0 else ""
     text = (
         f"🎉 Оплата получена! Аккаунт #{acc.id}\n\n"
         f"Логин: {acc.login}\n"
         f"Пароль: {acc.password}\n"
         f"Ранг: {acc.rank}\n\n"
+        f"💰 Оплачено: {final_price:.0f} ₽{promo_line}\n\n"
         f"⏱ Аренда действует до: "
         f"{acc.rented_until.strftime('%d.%m.%Y %H:%M')} UTC"
     )
 
     try:
-        await bot.send_message(acc.buyer_id, text)
+        await bot.send_message(acc.buyer_id, text, parse_mode="Markdown")
     except Exception as e:
         logging.warning(f"Не смог отправить покупателю {acc.buyer_id}: {e}")
 
