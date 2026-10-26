@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime
 from aiogram import Router, F
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, CommandObject
 from aiogram.types import (
     CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton,
 )
@@ -10,6 +10,7 @@ from keyboards.inline import main_menu
 from config import SUPPORT_USERNAME, WEB_BASE_URL
 from database.models import Customer
 from services.avatar_service import refresh_avatar
+from services.referral_service import bind_referral
 
 router = Router()
 
@@ -26,6 +27,29 @@ ONBOARDING_TEXT = (
     "📜 Условия аренды\n\n"
     "Нажмите «✅ Согласен», если принимаете условия — и мы начнём!"
 )
+
+
+@router.message(CommandStart(deep_link=True))
+async def cmd_start_deeplink(message: Message, command: CommandObject, state: FSMContext, session):
+    args = command.args
+    if args and args.startswith("ref_"):
+        try:
+            referrer_id = int(args.replace("ref_", ""))
+            cust = await session.get(Customer, message.from_user.id)
+            if not cust:
+                cust = Customer(
+                    telegram_id=message.from_user.id,
+                    username=message.from_user.username,
+                    first_name=message.from_user.first_name,
+                )
+                session.add(cust)
+                await session.commit()
+                
+            await bind_referral(session, referrer_id, message.from_user.id)
+        except Exception as e:
+            logging.error(f"Ошибка при обработке реф-ссылки: {e}")
+
+    await cmd_start(message, state, session)
 
 
 @router.message(CommandStart())
@@ -61,7 +85,6 @@ async def cmd_start(message: Message, state: FSMContext, session):
 @router.callback_query(F.data == "agree_terms")
 async def agree_terms(callback: CallbackQuery, state: FSMContext, session):
     await state.clear()
-
     cust = await session.get(Customer, callback.from_user.id)
     if not cust:
         cust = Customer(
