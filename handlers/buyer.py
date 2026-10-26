@@ -2,7 +2,7 @@ from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
-from sqlalchemy import select, distinct
+from sqlalchemy import select, distinct, func
 from datetime import datetime, timedelta
 from database.models import Account, PaymentMethod, RentalHistory, Customer, Promocode
 from keyboards.inline import (
@@ -17,6 +17,7 @@ from services.notifications import notify_admin
 from services.partner_service import on_rental_started
 from services.avatar_service import refresh_avatar
 from services.promo_service import validate_promo, record_promo_use
+from services.referral_service import calculate_checkout_discount, apply_bonus_spend
 from web import notifications
 from config import SUPPORT_USERNAME
 
@@ -237,7 +238,8 @@ async def choose_method(callback: CallbackQuery, session):
         await callback.answer("Этот аккаунт уже занят!", show_alert=True)
         return
 
-    price = {3: account.price_3h, 6: account.price_6h, 12: account.price_12h}[hours]
+    original_price = {3: account.price_3h, 6: account.price_6h, 12: account.price_12h}[hours]
+    price_after_promo = original_price
     promo_text = ""
 
     if promo_id > 0:
@@ -245,21 +247,37 @@ async def choose_method(callback: CallbackQuery, session):
         promo = result.scalar_one_or_none()
         if promo:
             _, discount, error = await validate_promo(
-                session, promo.code, callback.from_user.id, hours, price
+                session, promo.code, callback.from_user.id, hours, original_price
             )
             if not error:
-                price = round(price - discount, 2)
+                price_after_promo = round(original_price - discount, 2)
                 promo_text = f"\n🎟 Промокод: *{promo.code}* (−{discount:.0f} ₽)"
             else:
                 promo_id = 0
                 promo_text = "\n⚠️ Промокод больше не действует"
+
+    orders_count = (await session.execute(
+        select(func.count(RentalHistory.id)).where(RentalHistory.buyer_id == callback.from_user.id)
+    )).scalar() or 0
+    is_first_order = (orders_count == 0)
+
+    welcome_disc, bonus_spent, final_price, bonus_left = await calculate_checkout_discount(
+        session, callback.from_user.id, price_after_promo, is_first_order
+    )
+
+    discount_lines = []
+    if promo_text: discount_lines.append(promo_text.strip())
+    if welcome_disc > 0: discount_lines.append(f"🎁 Приветств. скидка: −{welcome_disc:.0f} ₽")
+    if bonus_spent > 0: discount_lines.append(f"💰 Бонусы: −{bonus_spent:.0f} ₽")
+    
+    discount_text = "\n" + "\n".join(discount_lines) if discount_lines else ""
 
     methods = await _get_enabled_methods(session)
     await callback.message.delete()
     await callback.message.answer(
         f"Аккаунт #{account.id} ({account.rank})\n"
         f"Аренда на {hours} ч\n\n"
-        f"💰 Сумма: *{price:.0f} ₽*{promo_text}\n\n"
+        f"💰 Сумма: *{final_price:.0f} ₽*{discount_text}\n\n"
         f"Выберите способ оплаты:",
         parse_mode="Markdown",
         reply_markup=payment_methods_with_promo_keyboard(
@@ -336,8 +354,7 @@ async def handle_payment(
         return
 
     original_price = {3: account.price_3h, 6: account.price_6h, 12: account.price_12h}[hours]
-    price = original_price
-    discount = 0
+    promo_discount = 0
 
     if promo_id > 0 and method_code == "cryptobot":
         result = await session.execute(select(Promocode).where(Promocode.id == promo_id))
@@ -347,12 +364,24 @@ async def handle_payment(
                 session, promo.code, callback.from_user.id, hours, original_price
             )
             if not error:
-                price = round(original_price - discount, 2)
+                promo_discount = discount
             else:
-                discount = 0
                 promo_id = 0
 
+    price_after_promo = original_price - promo_discount
+
+    orders_count = (await session.execute(
+        select(func.count(RentalHistory.id)).where(RentalHistory.buyer_id == callback.from_user.id)
+    )).scalar() or 0
+    is_first_order = (orders_count == 0)
+
+    welcome_disc, bonus_spent, final_price, bonus_left = await calculate_checkout_discount(
+        session, callback.from_user.id, price_after_promo, is_first_order
+    )
+
     test_mode = await get_setting(session, "test_mode", "0")
+    price = final_price
+
     if test_mode == "1":
         account.status = "rented"
         account.buyer_id = callback.from_user.id
@@ -362,7 +391,7 @@ async def handle_payment(
         account.payment_invoice_id = None
         if promo_id > 0:
             account.promo_id = promo_id
-            account.promo_discount = discount
+            account.promo_discount = promo_discount
 
         rental = RentalHistory(
             account_id=account.id,
@@ -381,6 +410,9 @@ async def handle_payment(
 
         if promo_id > 0:
             await record_promo_use(session, account, "test")
+            
+        if bonus_spent > 0:
+            await apply_bonus_spend(session, callback.from_user.id, bonus_spent, f"Аренда #{account.id}")
 
         notifications.push(
             "🧪 Тестовая аренда",
@@ -388,7 +420,12 @@ async def handle_payment(
             level="warning",
         )
 
-        promo_line = f"\n🎟 Промокод: −{discount:.0f} ₽" if discount > 0 else ""
+        discount_lines = []
+        if promo_discount > 0: discount_lines.append(f"🎟 Промо: −{promo_discount:.0f} ₽")
+        if welcome_disc > 0: discount_lines.append(f"🎁 Приветств: −{welcome_disc:.0f} ₽")
+        if bonus_spent > 0: discount_lines.append(f"💰 Бонусы: −{bonus_spent:.0f} ₽")
+        discount_str = "\n" + "\n".join(discount_lines) if discount_lines else ""
+
         text = (
             f"⚠️ **ТЕСТОВЫЙ РЕЖИМ**\n"
             f"Оплата пропущена, аккаунт выдан!\n\n"
@@ -396,7 +433,7 @@ async def handle_payment(
             f"Логин: `{account.login}`\n"
             f"Пароль: `{account.password}`\n"
             f"Ранг: {account.rank}\n\n"
-            f"💰 Оплачено: {price:.0f} ₽{promo_line}\n\n"
+            f"💰 Оплачено: {price:.0f} ₽{discount_str}\n\n"
             f"⏱ Аренда до: {account.rented_until.strftime('%d.%m.%Y %H:%M')} UTC"
         )
         await callback.message.delete()
@@ -420,13 +457,13 @@ async def handle_payment(
         account.reserved_at = datetime.utcnow()
         if promo_id > 0:
             account.promo_id = promo_id
-            account.promo_discount = discount
+            account.promo_discount = promo_discount
         await session.commit()
 
         try:
             title = f"MyrShop #{account.id} ({account.rank}) — {hours}ч"
-            if discount > 0:
-                title += f" (промо −{discount:.0f}₽)"
+            if promo_discount > 0:
+                title += f" (промо −{promo_discount:.0f}₽)"
             data = await cryptobot.create_invoice(price, title)
             if not data.get("ok"):
                 raise RuntimeError(data.get("error", "неизвестная ошибка"))
@@ -434,11 +471,19 @@ async def handle_payment(
             invoice = data["result"]
             account.payment_invoice_id = str(invoice["invoice_id"])
             await session.commit()
+            
+            if bonus_spent > 0:
+                await apply_bonus_spend(session, callback.from_user.id, bonus_spent, f"Оплата аренды #{account.id}")
 
-            promo_line = f"\n🎟 Промокод: −{discount:.0f} ₽" if discount > 0 else ""
+            discount_lines = []
+            if promo_discount > 0: discount_lines.append(f"🎟 Промо: −{promo_discount:.0f} ₽")
+            if welcome_disc > 0: discount_lines.append(f"🎁 Приветств: −{welcome_disc:.0f} ₽")
+            if bonus_spent > 0: discount_lines.append(f"💰 Бонусы: −{bonus_spent:.0f} ₽")
+            discount_str = "\n" + "\n".join(discount_lines) if discount_lines else ""
+
             text = (
                 f"✅ Аккаунт #{account.id} зарезервирован на {hours} ч!\n\n"
-                f"💰 Сумма: *{price:.0f} ₽*{promo_line}\n"
+                f"💰 Сумма: *{price:.0f} ₽*{discount_str}\n"
                 f"🪙 Оплата через CryptoBot\n\n"
                 f"🔗 Ссылка на оплату: {invoice['bot_invoice_url']}\n\n"
                 f"⏱ Счёт действует 15 минут.\n"
