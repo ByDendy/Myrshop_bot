@@ -136,6 +136,32 @@ class Customer(Base):
     banned_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     agreed_to_terms: Mapped[bool] = mapped_column(Boolean, default=False)
     agreed_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    
+    bonus_balance: Mapped[float] = mapped_column(Float, default=0.0)
+    referred_by: Mapped[int] = mapped_column(BigInteger, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class Referral(Base):
+    __tablename__ = "referrals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    referrer_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    referred_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False)
+    orders_completed: Mapped[int] = mapped_column(Integer, default=0)
+    bonus_paid: Mapped[float] = mapped_column(Float, default=0.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class BonusTransaction(Base):
+    __tablename__ = "bonus_transactions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    customer_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    type: Mapped[str] = mapped_column(String(50), nullable=False)
+    description: Mapped[str] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
