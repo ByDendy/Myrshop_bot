@@ -42,6 +42,8 @@ class Account(Base):
 
     lot_id: Mapped[str] = mapped_column(String(100), nullable=True)
     payment_invoice_id: Mapped[str] = mapped_column(String(100), nullable=True)
+    promo_id: Mapped[int] = mapped_column(Integer, nullable=True)
+    promo_discount: Mapped[float] = mapped_column(Float, nullable=True)
     buyer_id: Mapped[int] = mapped_column(BigInteger, nullable=True)
     rental_hours: Mapped[int] = mapped_column(Integer, nullable=True)
     rented_until: Mapped[datetime] = mapped_column(DateTime, nullable=True)
@@ -173,4 +175,32 @@ class Manager(Base):
     login: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     permissions: Mapped[str] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class Promocode(Base):
+    __tablename__ = "promocodes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    discount_type: Mapped[str] = mapped_column(String(20), default="percent")
+    discount_value: Mapped[float] = mapped_column(Float, nullable=False)
+    condition_type: Mapped[str] = mapped_column(String(30), default="any_order")
+    max_uses: Mapped[int] = mapped_column(Integer, default=0)
+    used_count: Mapped[int] = mapped_column(Integer, default=0)
+    valid_until: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class PromocodeUse(Base):
+    __tablename__ = "promocode_uses"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    promocode_id: Mapped[int] = mapped_column(Integer, ForeignKey("promocodes.id"))
+    telegram_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    account_id: Mapped[int] = mapped_column(Integer, ForeignKey("accounts.id"))
+    original_price: Mapped[float] = mapped_column(Float, nullable=False)
+    discount_applied: Mapped[float] = mapped_column(Float, nullable=False)
+    final_price: Mapped[float] = mapped_column(Float, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
