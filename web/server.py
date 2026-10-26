@@ -1065,6 +1065,5 @@ def create_web_app(bot):
     app.router.add_post("/partners/{id}/unblock", partner_unblock)
     app.router.add_post("/partners/{id}/payout", partner_payout_direct)
 
-    app.router.add_static("/static", path="static")
     register_photo_route(app, bot)
     return app
